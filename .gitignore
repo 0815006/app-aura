@@ -1,0 +1,78 @@
+# ============================================================
+# Aura 智能体平台 - 统一 .gitignore
+# 覆盖根目录 + web-aura-next (Next.js) 子项目
+# ============================================================
+
+# --- 构建产物 ---
+bin/
+
+# --- 依赖 ---
+node_modules/
+web-aura-next/node_modules/
+
+# --- 环境变量（含敏感信息，禁止提交） ---
+.env
+.env.*
+!.env.example
+web-aura-next/.env
+web-aura-next/.env.*
+!web-aura-next/.env.example
+
+# --- Next.js ---
+.next/
+out/
+build/
+web-aura-next/.next/
+web-aura-next/out/
+web-aura-next/build/
+
+# --- TypeScript ---
+*.tsbuildinfo
+next-env.d.ts
+web-aura-next/*.tsbuildinfo
+web-aura-next/next-env.d.ts
+
+# --- 测试 ---
+coverage/
+web-aura-next/coverage/
+
+# --- Vercel ---
+.vercel
+web-aura-next/.vercel
+
+# --- 操作系统 ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --- IDE / 编辑器 ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Windows 特定 ---
+*.exe
+*.msi
+
+# --- 数据根目录（运行时生成，本地测试用） ---
+# 生产环境 DATA_ROOT = D:\data\aura (Win) / /data/aura (Linux)
+data/
+
+# --- 日志 ---
+*.log
+logs/
+web-aura-next/npm-debug.log*
+web-aura-next/yarn-debug.log*
+web-aura-next/yarn-error.log*
+web-aura-next/.pnpm-debug.log*
+
+# --- 证书 / 密钥 ---
+*.pem
+*.key
+*.crt
+
+# --- 零字节占位 (保留空目录) ---
+# 如需保留空目录结构，在目录内放 .gitkeep 即可

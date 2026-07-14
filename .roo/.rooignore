@@ -1,0 +1,35 @@
+# ===== Frontend (web-agent-vue) =====
+web-agent-vue/node_modules/
+web-agent-vue/dist/
+web-agent-vue/.vite/
+web-agent-vue/*.tsbuildinfo
+web-agent-vue/*.log
+web-agent-vue/npm-debug.log*
+
+# ===== Backend (java-agent-server) =====
+java-agent-server/target/
+java-agent-server/logs/
+java-agent-server/*.log
+java-agent-server/*.class
+java-agent-server/*.jar
+java-agent-server/*.war
+java-agent-server/*.ear
+
+# ===== Docker =====
+docker/data/
+
+# ===== IDE =====
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# ===== Environment =====
+.env
+.env.production
+.env.local
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+Desktop.ini
