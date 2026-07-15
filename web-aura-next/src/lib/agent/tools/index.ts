@@ -11,20 +11,22 @@
  *   3. read_file_full       —— 全文读取器
  *
  * 二、资产产出与修改类（Write & Mutation）
- *   4. write_text_file           —— 基础文本写入
- *   5. generate_structured_excel —— 结构化表格生成
+ *   4. create_directory          —— 目录创建器
+ *   5. write_text_file           —— 基础文本写入
+ *   6. generate_structured_excel —— 结构化表格生成
  *
  * 三、动态计算与代码执行类（Sandbox & Compute）
- *   6. execute_python_code —— Python 沙箱执行器
+ *   7. execute_python_code —— Python 沙箱执行器
  *
  * 四、外部世界连接类（Connectivity）
- *   7. web_search   —— 实时联网搜索
- *   8. http_request —— 通用网络请求
+ *   8. web_search   —— 实时联网搜索
+ *   9. http_request —— 通用网络请求
  */
 
 export { listDirectory } from "./list-directory";
 export { previewFileLines } from "./preview-file-lines";
 export { readFileFull } from "./read-file-full";
+export { createDirectory } from "./create-directory";
 export { writeTextFile } from "./write-text-file";
 export { generateStructuredExcel } from "./generate-structured-excel";
 export { executePythonCode } from "./execute-python-code";

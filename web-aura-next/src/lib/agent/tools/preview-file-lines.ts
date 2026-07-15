@@ -6,7 +6,7 @@
  */
 import { tool } from "ai";
 import { z } from "zod/v4";
-import { resolveSafePath } from "@/lib/env";
+import { resolveWorkspaceAwarePath } from "@/lib/agent/tool-context";
 import fs from "fs";
 
 const MAX_PREVIEW_LINES = 200;
@@ -34,7 +34,7 @@ export const previewFileLines = tool({
     lines?: number;
   }): Promise<string> => {
     try {
-      const safePath = resolveSafePath(filePath);
+      const safePath = resolveWorkspaceAwarePath(filePath);
       const stat = fs.statSync(safePath);
 
       if (stat.size > MAX_PREVIEW_BYTES) {

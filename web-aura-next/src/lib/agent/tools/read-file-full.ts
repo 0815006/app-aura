@@ -6,7 +6,7 @@
  */
 import { tool } from "ai";
 import { z } from "zod/v4";
-import { resolveSafePath } from "@/lib/env";
+import { resolveWorkspaceAwarePath } from "@/lib/agent/tool-context";
 import fs from "fs";
 
 const MAX_FILE_SIZE = 500 * 1024; // 500KB
@@ -20,7 +20,7 @@ export const readFileFull = tool({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   execute: async ({ filePath }: { filePath: string }): Promise<string> => {
     try {
-      const safePath = resolveSafePath(filePath);
+      const safePath = resolveWorkspaceAwarePath(filePath);
       const stat = fs.statSync(safePath);
 
       if (stat.size > MAX_FILE_SIZE) {

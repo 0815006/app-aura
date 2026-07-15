@@ -6,7 +6,8 @@
  */
 import { tool } from "ai";
 import { z } from "zod/v4";
-import { resolveSafePath, getDataRoot } from "@/lib/env";
+import { resolveWorkspaceAwarePath } from "@/lib/agent/tool-context";
+import { getDataRoot } from "@/lib/env";
 import fs from "fs";
 import path from "path";
 
@@ -23,7 +24,7 @@ export const listDirectory = tool({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   execute: async ({ dirPath }: { dirPath: string }): Promise<string> => {
     try {
-      const safePath = resolveSafePath(dirPath);
+      const safePath = resolveWorkspaceAwarePath(dirPath);
       const entries = fs.readdirSync(safePath, { withFileTypes: true });
 
       const result = entries.map((entry) => ({

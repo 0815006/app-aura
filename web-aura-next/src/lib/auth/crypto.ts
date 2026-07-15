@@ -24,7 +24,7 @@ function getEncryptionKey(): Buffer {
   console.warn(
     "[Aura Crypto] ⚠️  AURA_ENCRYPTION_KEY 未设置，使用不安全 fallback key，生产环境务必配置！"
   );
-  return Buffer.from("aura-dev-fallback-key-32byte!!", "utf-8").slice(
+  return Buffer.from("aura_dev_fallback_32bytes_okay!!", "utf-8").slice(
     0,
     KEY_LENGTH
   );

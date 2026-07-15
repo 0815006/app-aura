@@ -6,12 +6,15 @@ import { chatMessages, userModelConfigs } from "@/lib/db/schema";
 import { ensureDataDirs, isServerMode, getWorkspaceRootForUser } from "@/lib/env";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { decrypt } from "@/lib/auth/crypto";
+import { setToolContext, clearToolContext } from "@/lib/agent/tool-context";
+import type { ToolContext } from "@/lib/agent/tool-context";
 import { eq, and } from "drizzle-orm";
 
 import {
   listDirectory,
   previewFileLines,
   readFileFull,
+  createDirectory,
   writeTextFile,
   generateStructuredExcel,
   executePythonCode,
@@ -34,16 +37,10 @@ import {
  *    - 从 user_model_configs 表查询用户选定/默认的模型配置
  *    - 解密 apiKey 后动态创建 provider
  *    - 工作空间路径 = DATA_ROOT/workspaces/user_{userId}/{workspaceId}
- *
- * 规范要点：
- * - 流式优先：使用 streamText 而非 generateText
- * - 工具异常隔离：Tool 失败绝不导致主 Chat 流中断
- * - 超时熔断：调用外部系统显式设置 Timeout（默认 10 秒）
- * - 会话持久化：onFinish 回调中将多轮对话增量写入 PostgreSQL
  */
 
 // ============================================================
-// 8 大原子工具注册表
+// 9 大原子工具注册表
 // ============================================================
 
 const auraTools = {
@@ -53,6 +50,7 @@ const auraTools = {
   readFileFull,
 
   // 二、资产产出与修改类
+  createDirectory,
   writeTextFile,
   generateStructuredExcel,
 
@@ -63,6 +61,37 @@ const auraTools = {
   webSearch,
   httpRequest,
 };
+
+// ============================================================
+// ★ AI SDK v7 消息格式转换辅助函数
+// ============================================================
+// useChat (UI 层) 发送: { role, parts: [{ type, text }], id }
+// streamText (Core 层) 需要: { role, content: string }
+// 此处做 format normalization。
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractTextFromUiMessage(msg: any): string {
+  if (typeof msg.content === "string") return msg.content;
+  if (Array.isArray(msg.parts)) {
+    return msg.parts
+      .filter((p: { type: string }) => p.type === "text")
+      .map((p: { text: string }) => p.text)
+      .join("");
+  }
+  return "";
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeMessages(msgs: any[]): any[] {
+  return msgs.map((m) => {
+    // 如果已有 content 字段（Core 格式），直接透传
+    if (m.content !== undefined) {
+      return { role: m.role, content: m.content };
+    }
+    // AI SDK v7 UI 格式：parts 数组 → content 字符串
+    return { role: m.role, content: extractTextFromUiMessage(m) };
+  });
+}
 
 // ============================================================
 // POST /api/chat
@@ -78,13 +107,37 @@ export async function POST(req: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const body = (await req.json()) as Record<string, any>;
 
-    const prompt: string = body.prompt ?? "";
+    // ★ AI SDK v7: useChat 发送 body.messages = [{ role, parts, id }]
+    // 必须转换为 streamText 需要的 [{ role, content }] 格式
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawMessages: any[] = Array.isArray(body.messages) ? body.messages : [];
+
+    // 提取最后一条用户消息的纯文本（用于日志和持久化）
+    let prompt = "";
+    if (rawMessages.length > 0) {
+      prompt = extractTextFromUiMessage(rawMessages[rawMessages.length - 1]);
+    }
+    if (!prompt && body.prompt) {
+      prompt = body.prompt;
+    }
+
+    // 消息格式标准化：UI parts → Core content
+    const aiMessages: any[] = rawMessages.length > 0
+      ? normalizeMessages(rawMessages)
+      : prompt
+        ? [{ role: "user", content: prompt }]
+        : [];
+
     const sessionId: string = body.sessionId ?? body.chatId ?? "default";
     const workspaceId: string | null = body.workspaceId ?? null;
     const selectedConfigId: string | null = body.modelConfigId ?? null;
 
     // ReAct 最大工具调用步数（防止无限循环消耗 Token）
-    const maxSteps: number = body.maxSteps ?? 10;
+    const maxSteps: number = body.maxSteps ?? 15;
+
+    console.log(
+      `[Aura Chat] ${rawMessages.length} 条消息, prompt: "${prompt.slice(0, 80)}"`
+    );
 
     // ============================================================
     // ★ Phase 4: 双模式 Key 解析
@@ -99,7 +152,6 @@ export async function POST(req: Request) {
     const localKey = req.headers.get("x-aura-local-key");
 
     if (localKey) {
-      // ===== 客户端模式：从请求 body 拿完整模型配置 =====
       const clientApiKey = body.apiKey ?? localKey;
       const clientBaseUrl =
         body.baseUrl ?? "https://api.deepseek.com/v1";
@@ -115,11 +167,9 @@ export async function POST(req: Request) {
       activeApiKey = clientApiKey;
       activeBaseUrl = clientBaseUrl;
       activeModelName = clientModelName;
-      // 客户端模式下 Key 用完即焚，不落库
 
       console.log("[Aura Chat] 客户端模式 (X-Aura-Local-Key)");
     } else {
-      // ===== 服务端模式：JWT 鉴权 + 从 DB 查模型配置 =====
       const authPayload = await getAuthenticatedUser(req);
       if (!authPayload) {
         return Response.json(
@@ -130,7 +180,6 @@ export async function POST(req: Request) {
 
       activeUserId = authPayload.userId;
 
-      // 从 DB 查用户选定/默认的模型配置
       const config = await db.query.userModelConfigs.findFirst({
         where: and(
           eq(userModelConfigs.userId, authPayload.userId),
@@ -141,7 +190,6 @@ export async function POST(req: Request) {
       });
 
       if (!config) {
-        // 如果没有配置，使用环境变量兜底
         activeApiKey = process.env.DEEPSEEK_API_KEY ?? "";
         activeBaseUrl =
           process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1";
@@ -154,7 +202,6 @@ export async function POST(req: Request) {
           );
         }
       } else {
-        // 解密用户配置的 API Key
         activeApiKey = decrypt(config.apiKeyEncrypted);
         activeBaseUrl = config.baseUrl ?? "https://api.deepseek.com/v1";
         activeModelName = config.modelName;
@@ -175,31 +222,42 @@ export async function POST(req: Request) {
     });
 
     // ============================================================
-    // 3. 构建 system prompt（注入工作空间上下文）
+    // 3. 构建 system prompt
     // ============================================================
 
     let systemPrompt =
-      "你是 Aura，一个多场景通用智能体。你可以使用文件读写、Python 执行、联网搜索、HTTP 请求等工具来完成用户的任务。" +
-      "当需要生成文件时，只输出结构化 JSON 数据，由 write_text_file 或 generate_structured_excel 工具来完成文件物化。" +
-      "工具调用失败时，分析错误原因并尝试用其他方式完成任务，不要轻易放弃。";
+      "你是 Aura Agent。用户消息 = 命令，必须立即调工具，禁止先输出文字。" +
+      "工具: create_directory, write_text_file(自动建父目录), list_directory, read_file_full, preview_file_lines, web_search, http_request, execute_python_code, generate_structured_excel。" +
+      "路径: 根目录='.'。示例: create_directory('docs') → write_text_file('docs/f.md','内容')。";
 
     // 注入工作空间上下文
     if (workspaceId && activeUserId) {
       const wsPath = getWorkspaceRootForUser(activeUserId, workspaceId);
-      systemPrompt += `\n当前工作空间路径: ${wsPath}。所有文件操作请以该路径为根目录。`;
+      systemPrompt +=
+        `\n\n【当前工作空间】${wsPath}`;
     }
 
     // ============================================================
     // 4. 流式对话
     // ============================================================
 
+    // ★ 注入 workspace 上下文到所有工具
+    // 工具通过 runWithContext().workspaceId 感知到当前 workspace
+    const toolCtx: ToolContext = {
+      userId: activeUserId,
+      workspaceId,
+    };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = streamText({
+    const result = await runWithContext(toolCtx, () => streamText({
       model: customProvider(activeModelName),
       system: systemPrompt,
-      messages: [{ role: "user", content: prompt }],
+      messages: aiMessages,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       tools: auraTools as any,
+      // ★ 强制模型优先选择工具调用（而非输出文字）
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      toolChoice: "auto" as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       maxSteps: maxSteps as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -213,16 +271,28 @@ export async function POST(req: Request) {
         }
       },
 
-      // 工具执行完成/流结束时，持久化聊天记录
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       onFinish: async (event: any) => {
         try {
-          const { steps } = event;
+          const { steps, finishReason } = event;
 
-          // 仅服务端模式 + 有 userId 时持久化到 PG
+          // ★ 诊断日志
+          console.log(
+            `[Aura Chat] onFinish: finishReason=${finishReason}, stepCount=${steps?.length ?? 0}`
+          );
+          if (steps && Array.isArray(steps)) {
+            steps.forEach((s: any, i: number) => {
+              const tc = s.toolCalls?.[0];
+              const tr = s.toolResults?.[0];
+              const trPreview = tr ? JSON.stringify(tr).slice(0, 200) : "N/A";
+              console.log(
+                `[Aura Chat] Step[${i}]: type=${s.stepType ?? "?"}, text=${(s.text ?? "").slice(0, 80)}, toolName=${tc?.toolName ?? "N/A"}, toolResult=${trPreview}`
+              );
+            });
+          }
+
           if (!isServerMode() || !activeUserId) return;
 
-          // 写入 user prompt
           if (prompt) {
             await db.insert(chatMessages).values([
               {
@@ -235,7 +305,6 @@ export async function POST(req: Request) {
             ]);
           }
 
-          // 写入 bot 响应
           const responseText =
             steps
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -260,10 +329,6 @@ export async function POST(req: Request) {
               },
             ]);
           }
-
-          console.log(
-            `[Aura Chat] 会话 ${sessionId} 已完成，持久化 ${steps?.length ?? 0} 步`
-          );
         } catch (dbErr) {
           console.error("[Aura Chat] 会话持久化失败:", dbErr);
         }
@@ -274,7 +339,7 @@ export async function POST(req: Request) {
       },
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+    } as any));
 
     return result.toUIMessageStreamResponse();
   } catch (error) {
