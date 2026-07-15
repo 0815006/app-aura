@@ -7,59 +7,158 @@ import {
   index,
   jsonb,
   customType,
-} from 'drizzle-orm/pg-core';
+  uuid,
+  pgEnum,
+  integer,
+  boolean,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 
 // ============================================================
 // pgvector 向量类型定义（兼容 Drizzle customType）
 // ============================================================
 const vector = customType<{ data: number[] }>({
   dataType() {
-    return 'vector(1536)';
+    return "vector(1536)";
   },
 });
 
 // ============================================================
-// 1. 聊天记录表 (chat_messages)
-// 每轮对话结束后通过 onFinish 回调持久化，支持跨设备恢复
+// 枚举类型
 // ============================================================
-export const chatMessages = pgTable(
-  'chat_messages',
+export const workspaceStatusEnum = pgEnum("workspace_status", [
+  "active",
+  "archived",
+]);
+
+// ============================================================
+// 0. 用户表 (users) — 极简账户系统
+// ============================================================
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: varchar("username", { length: 100 }).notNull().unique(),
+  passwordHash: varchar("password_hash", { length: 255 }).notNull(), // bcrypt hash
+  displayName: varchar("display_name", { length: 100 }),
+  createTime: timestamp("create_time", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updateTime: timestamp("update_time", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+// ============================================================
+// 0.5. 用户模型配置表 (user_model_configs)
+// 每个用户可配置多个模型（DeepSeek / OpenAI 等），
+// api_key 使用 AES-256-GCM 加密存储。
+// ============================================================
+export const userModelConfigs = pgTable(
+  "user_model_configs",
   {
-    id: serial('id').primaryKey(),
-    sessionId: varchar('session_id', { length: 255 }).notNull(),
-    role: varchar('role', { length: 50 }).notNull(), // 'user' | 'assistant' | 'system'
-    content: text('content').notNull(),
-    // 工具调用元数据（JSONB 存储 toolName / args / result）
-    toolCalls: jsonb('tool_calls'),
-    createTime: timestamp('create_time', { withTimezone: true }).defaultNow().notNull(),
-    updateTime: timestamp('update_time', { withTimezone: true }).defaultNow().notNull(),
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    label: varchar("label", { length: 100 }).notNull(), // 用户自定义标签
+    modelName: varchar("model_name", { length: 100 }).notNull(), // 实际模型名 (e.g. deepseek-chat)
+    apiKeyEncrypted: text("api_key_encrypted").notNull(), // AES-256-GCM 加密后的 Key
+    baseUrl: text("base_url").default("https://api.deepseek.com/v1"),
+    isDefault: boolean("is_default").default(false),
+    createTime: timestamp("create_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updateTime: timestamp("update_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
-    sessionIdx: index('idx_chat_messages_session_id').on(table.sessionId),
-    createTimeIdx: index('idx_chat_messages_create_time').on(table.createTime),
-  }),
+    userIdIdx: index("idx_user_model_configs_user_id").on(table.userId),
+    uniqueUserLabel: uniqueIndex("uidx_user_label").on(
+      table.userId,
+      table.label
+    ),
+  })
 );
 
 // ============================================================
-// 2. 向量知识库表 (agent_knowledge)
-// 存放文档段落、代码片段、运维 SOP 等，支持 RAG 语义检索
+// 1. 工作空间表 (workspaces) —— 仅服务端
 // ============================================================
-export const agentKnowledge = pgTable(
-  'agent_knowledge',
+export const workspaces = pgTable(
+  "workspaces",
   {
-    id: serial('id').primaryKey(),
-    title: varchar('title', { length: 500 }).notNull(),
-    content: text('content').notNull(),
-    // pgvector 1536 维向量（如 OpenAI text-embedding-ada-002 / DeepSeek 兼容）
-    embedding: vector('embedding'),
-    category: varchar('category', { length: 50 }), // 'dba' | 'perf' | 'monitor' | 'general'
-    // 来源文件路径（如 docs/xxx.md）
-    sourcePath: varchar('source_path', { length: 500 }),
-    createTime: timestamp('create_time', { withTimezone: true }).defaultNow().notNull(),
-    updateTime: timestamp('update_time', { withTimezone: true }).defaultNow().notNull(),
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    contextSnapshot: jsonb("context_snapshot"),
+    status: workspaceStatusEnum("status").default("active").notNull(),
+    createTime: timestamp("create_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updateTime: timestamp("update_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
-    categoryIdx: index('idx_agent_knowledge_category').on(table.category),
-    // HNSW 向量索引（用于近似最近邻检索，需 CREATE EXTENSION vector）
-  }),
+    userIdIdx: index("idx_workspaces_user_id").on(table.userId),
+  })
+);
+
+// ============================================================
+// 2. 聊天记录表 (chat_messages)
+// ============================================================
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: varchar("session_id", { length: 255 }).notNull(),
+    workspaceId: uuid("workspace_id"), // 关联 workspace（客户端模式为 null）
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: varchar("role", { length: 50 }).notNull(), // 'user' | 'assistant' | 'system'
+    content: text("content").notNull(),
+    toolCalls: jsonb("tool_calls"),
+    createTime: timestamp("create_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updateTime: timestamp("update_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    sessionIdx: index("idx_chat_messages_session_id").on(table.sessionId),
+    workspaceIdx: index("idx_chat_messages_workspace_id").on(table.workspaceId),
+    userIdIdx: index("idx_chat_messages_user_id").on(table.userId),
+    createTimeIdx: index("idx_chat_messages_create_time").on(table.createTime),
+  })
+);
+
+// ============================================================
+// 3. 向量知识库表 (agent_knowledge)
+// ============================================================
+export const agentKnowledge = pgTable(
+  "agent_knowledge",
+  {
+    id: serial("id").primaryKey(),
+    title: varchar("title", { length: 500 }).notNull(),
+    content: text("content").notNull(),
+    embedding: vector("embedding"),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    category: varchar("category", { length: 50 }),
+    sourcePath: varchar("source_path", { length: 500 }),
+    createTime: timestamp("create_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updateTime: timestamp("update_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    categoryIdx: index("idx_agent_knowledge_category").on(table.category),
+    userIdIdx: index("idx_agent_knowledge_user_id").on(table.userId),
+  })
 );

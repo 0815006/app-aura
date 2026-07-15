@@ -2,9 +2,18 @@
 
 import React from "react";
 import { useLayout } from "./Layout";
+import { useAuth } from "@/lib/auth/auth-context";
+import { useRouter } from "next/navigation";
 
 export function Header() {
   const { collapsed, toggleCollapsed } = useLayout();
+  const { user, logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
+  };
 
   return (
     <header
@@ -43,19 +52,33 @@ export function Header() {
 
       {/* 右侧：用户信息 + 登出 */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 text-sm text-slate-400">
-          <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold">
-            A
-          </div>
-          <span className="hidden sm:inline">Admin</span>
-        </div>
+        {user ? (
+          <>
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold">
+                {(user.displayName || user.username).charAt(0).toUpperCase()}
+              </div>
+              <span className="hidden sm:inline">
+                {user.displayName || user.username}
+              </span>
+            </div>
 
-        <button
-          className="text-sm text-slate-400 hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-slate-800"
-          title="登出"
-        >
-          登出
-        </button>
+            <button
+              onClick={handleLogout}
+              className="text-sm text-slate-400 hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+              title="登出"
+            >
+              登出
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => router.push("/login")}
+            className="text-sm text-slate-400 hover:text-emerald-400 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+          >
+            登录
+          </button>
+        )}
       </div>
     </header>
   );

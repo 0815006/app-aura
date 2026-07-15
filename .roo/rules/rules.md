@@ -6,26 +6,49 @@
 
 ```text
 app-aura/                   # 顶层主目录
-├── docs/                   # 文档与本地知识库工作目录（网页端可直接扫描、使用这里的文件）
+├── docs/                   # 开发文档（与源码同仓，非用户知识库）
 ├── deploy/                 # 部署与本地开发脚本
 │   ├── docker-compose.yml  # PostgreSQL + pgvector 数据库编排
 │   ├── pgvector-start.bat  # 启动 PostgreSQL 容器
 │   └── dev-start.bat       # 安装依赖 + 数据库迁移 + 启动 Next.js 开发服务器
-└── web-aura-next/          # 核心全栈工程 (Next.js 前端 UI + 后端 Agent API)
+└── web-aura-next/          # 核心全栈工程（一套代码，双端共用）
     ├── src/
-    │   ├── app/            # App Router：前端页面 + 后端 api/ 路由 (Route Handler)
+    │   ├── app/api/        # 服务端 API (Route Handler)，客户端通过 HTTP 远程调用
+    │   ├── app/            # App Router：双端共享的前端页面
+    │   ├── components/     # 双端共享 UI 组件
     │   ├── lib/agent/      # ★ 90% 精力核心：Aura 工具箱 (tools/*.ts)
-    │   └── lib/db/         # 数据库层 (Drizzle ORM schema / client / migrate)
+    │   ├── lib/db/         # 数据库层 (Drizzle ORM schema / client / migrate)
+    │   └── lib/tauri/      # 客户端专用：封装 Tauri 原生 API（读本地文件、调本地 Shell）
+    ├── src-tauri/          # Tauri 壳配置（仅桌面客户端打包用，几行 .toml）
     ├── drizzle/            # 自动生成的迁移 SQL（由 npm run db:generate 产出）
     ├── package.json
     └── next.config.ts
 ```
 
+### 1.1 双端架构（Server + Client）
+
+Aura 拆分为 **服务端** 和 **客户端** 两种运行形态，共用同一套 `web-aura-next/` 代码，通过环境变量 `AURA_MODE` 区分：
+
+| 模式 | `AURA_MODE` | 运行方式 | 职责 |
+|------|-------------|---------|------|
+| **服务端** | `server` | `next start` (Standalone)，部署在 Windows 服务器上 | AI 编排、定时任务、生产监控告警、DBA 审计等重活；暴露 `/api` 供客户端调用 |
+| **客户端** | `client` | Tauri 打包成 Windows `.exe`，用户在本地双击运行 | 纯前端 UI，**不直连大模型**，所有 AI 请求转发到服务端 `/api`；通过 Tauri 原生 API 读写用户本地文件、调用本地 Shell |
+
+**双端文件操作差异**：
+
+* **服务端**：文件读写走 `DATA_ROOT` 目录（生产数据隔离），工具代码强制路径越权校验。仅能访问服务器本地磁盘，无法触及客户端机器上的文件。
+* **客户端**：文件读写通过 `src/lib/tauri/` 调用 Tauri 原生 FS API，直接操作用户本地文件系统，天然无浏览器沙箱限制。仅能访问用户本机文件，无法触及服务器磁盘。
+* **双端工作空间完全分离，互不交叉**：服务端工具读写 `DATA_ROOT`，客户端读写用户本机目录，两者不共享、不穿透。
+
+**客户端 API 转发**：客户端模式下，`src/lib/api-client.ts` 自动将 `/api/*` 请求转发到服务端地址（通过 `AURA_SERVER_URL` 环境变量配置），而非本地 `localhost`。
+
+**服务端 Windows 部署**：服务端同样部署在 Windows 机器上（`next start` + WinSW 注册为 Windows 服务），与客户端处于同一局域网即可。
+
 - **全栈框架**：`web-aura-next` (Next.js Standalone) —— 单一工程负责前端 UI 与后端 API，支持打包成独立 Node.js 服务脱离 Vercel 运行。
 - **AI 引擎**：`Vercel AI SDK` (`ai`) —— 核心负责流式蹦字（Streaming）与多轮工具调用（Function Calling）状态机。
 - **计算大脑**：`DeepSeek-R1 / V3` —— 通过 `@ai-sdk/deepseek` 官方 API 接入，提供极高性价比的强推理能力。
 - **数据库**：`aura_db` (PostgreSQL 16 + pgvector 插件) —— Docker 一键部署，承载聊天历史存储及向量检索（RAG）。
-- **文件存储**：前期统一使用服务器本地挂载目录（如 `docs/`），利用 Node.js `fs` 模块管理。当存储量突破 100GB 或多机扩展时，再无缝切换到 MinIO。
+- **文件存储**：服务端使用 `DATA_ROOT` 目录持久化；客户端直接操作用户本地文件系统（Tauri 原生 API）。
 
 ---
 
@@ -49,14 +72,52 @@ app-aura/                   # 顶层主目录
 
 ### 2.3 安全与权限控制
 
-* **路径越权隔离**：在所有涉及磁盘操作的工具函数内，第一行代码必须校验物理路径是否逃逸了当前工作空间的根目录（`docs/`），严防 Prompt 注入攻击导致读取系统根目录或敏感文件。
+#### 2.3.1 双端异构权限模型
+
+Aura 采用**双端异构权限模型**，同一套代码适配两种完全不同的准入模式：
+
+| 维度 | 服务端 (server) | 客户端 (client) |
+|------|----------------|----------------|
+| **准入门槛** | 必须登录，JWT 鉴权 | 免登录，Header 携带本地 Key |
+| **API Key 来源** | `user_model_configs` 表加密存储 | 请求 Header `X-Aura-Local-Key`（用完即焚不落库） |
+| **用户标识** | JWT 解析 `user_id` | 无 `user_id` 概念 |
+| **工作空间** | `DATA_ROOT/workspaces/user_{id}/{wsId}` | 客户端本地绝对路径 |
+
+* **`/api/chat` 双模式 Key 解析铁律**：
+  1. 先检查 `req.headers.get('x-aura-local-key')` — 有则走客户端免登模式，Key 用完即焚不落库
+  2. 无 Header Key 则走服务端模式 — `getAuthenticatedUser(req)` 解析 JWT 拿 `user_id`
+  3. 服务端模式从 `user_model_configs` 表查询该用户选定/默认的模型配置，解密后使用
+  4. 客户端模式提供 `X-Aura-Local-Key` 时必须同时提供 `baseUrl` 和 `modelName`（在同一请求 body 中）
+* **Auth 中间件**：所有需要用户身份的服务端 API 路由，第一步调用 `getAuthenticatedUser(req)` 解析 JWT，未登录返回 401。中间件位于 `src/lib/auth/`。
+* **注册模式**：开放注册，任何人访问登录页即可自行注册。注册后自动创建 `DATA_ROOT/workspaces/user_{id}/` 个人目录。
+* **Auth API 路由**：
+  * `POST /api/auth/login` — 登录，返回 JWT + Set-Cookie `aura_token`
+  * `POST /api/auth/register` — 开放注册，自动创建 `user_{id}` 工作空间目录
+  * `POST /api/auth/logout` — 登出，清除 Cookie
+* **JWT 规范**：使用 `jose` 库，HS256 算法，7 天过期。Cookie 名 `aura_token`，属性 `HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`。
+* **密码安全**：使用 `bcryptjs` 哈希存储，禁止明文落库。
+
+#### 2.3.2 数据库用户隔离
+
+* **用户表** (`users`)：`id SERIAL PK`, `username UNIQUE`, `password_hash`, `display_name`
+* **模型配置表** (`user_model_configs`)：`id UUID PK`, `user_id FK→users`, `label`, `model_name`, `api_key_encrypted` (AES-256-GCM), `base_url`, `is_default`
+* **已有表全部增加 `user_id` 字段**：`workspaces`, `chatMessages`, `agentKnowledge` 均需关联 `user_id`，查询时强制 WHERE `user_id = ?` 过滤
+* **API Key 加密**：`api_key_encrypted` 使用 AES-256-GCM 加密，密钥从 `AURA_ENCRYPTION_KEY` 环境变量读取。API 返回列表时**绝不返回加密后的 Key 字段**，仅返回 `id, label, modelName, baseUrl, isDefault`。
+
+#### 2.3.3 工作空间用户隔离
+
+* **目录结构**：`DATA_ROOT/workspaces/user_{userId}/{workspaceId}/`，每个用户只能访问自己目录下的 workspace
+* **路径越权校验（服务端，双重）**：
+  1. 第一重：校验 workspace 归属 `user_id`（DB 层）
+  2. 第二重：`resolveWorkspacePath(userId, workspaceId, userPath)` 校验最终路径在 `user_{userId}` 目录范围内
   ```typescript
-  const allowedRoot = path.resolve(process.cwd(), 'docs');
-  const targetPath = path.resolve(allowedRoot, userPath);
-  if (!targetPath.startsWith(allowedRoot)) {
-    throw new Error('路径越权：禁止访问 docs/ 以外的文件');
+  const userRoot = path.resolve(getDataRoot(), "workspaces", `user_${userId}`);
+  const targetPath = path.resolve(userRoot, workspaceId, userPath);
+  if (!targetPath.startsWith(userRoot)) {
+    throw new Error('路径越权：禁止访问其他用户的工作空间');
   }
   ```
+* **客户端文件操作**：客户端模式下不经过服务端文件校验。文件读写统一走 `src/lib/tauri/` 调用 Tauri 原生 FS API，直接操作用户本地文件系统。客户端只是纯 UI 壳，不运行 Agent 工具逻辑。
 * **环境变量**：所有敏感配置（API Key、数据库密码等）必须通过 `.env.local` 传入，**禁止硬编码**。使用 `process.env.XXX` 读取。
 
 ### 2.4 持久层与数据库
@@ -99,9 +160,9 @@ app-aura/                   # 顶层主目录
   import { z } from 'zod';
 
   export const listDirectory = tool({
-    description: '获取指定目录下的子目录和文件列表。用于浏览 docs/ 目录结构。',
+    description: '获取指定目录下的子目录和文件列表。用于浏览 DATA_ROOT 工作空间目录结构。',
     parameters: z.object({
-      path: z.string().describe('要浏览的目录路径，相对于 docs/ 根目录'),
+      path: z.string().describe('要浏览的目录路径，相对于 DATA_ROOT 根目录'),
     }),
     execute: async ({ path: dirPath }) => {
       // 路径越权校验（第一行）
@@ -130,7 +191,7 @@ app-aura/                   # 顶层主目录
 
 #### 二、资产产出与修改类（Write & Mutation）
 
-* **4. `write_text_file(path, content)`** —— 基础文本写入：在指定路径（限于 `docs/`）创建或覆盖纯文本文件。
+* **4. `write_text_file(path, content)`** —— 基础文本写入：在指定路径（限于 `DATA_ROOT`）创建或覆盖纯文本文件。
 * **5. `generate_structured_excel(path, sheet_name, json_data)`** —— 结构化表格生成：接收 JSON 数组，调用 Excel 库（如 `exceljs`）生成 Excel 文件。
 
 #### 三、动态计算与代码执行类（Sandbox & Compute）
@@ -305,7 +366,7 @@ export function getDataRoot(): string {
 
 * **环境变量注入**：部署脚本（如 [`deploy/build-server-lan.bat`](../../deploy/build-server-lan.bat)）在生成 `.env` / WinSW 服务定义文件时，必须写入 `DATA_ROOT` 环境变量。
 * **目录自创建**：服务启动时，若 `DATA_ROOT` 目录不存在，Node.js 进程应自动递归创建 `workspaces/`、`uploads/`、`logs/` 等标准子目录。
-* **与 `docs/` 的关系**：`docs/` 是开发期嵌入在项目内的知识库目录，仅供开发调试使用；生产环境（Standalone 模式）下 `docs/` 不会被部署，所有文件持久化操作必须走 `DATA_ROOT`。
+* **与 `docs/` 的关系**：`docs/` 是开发文档与源码同仓的目录，仅供 AI 开发时参考使用。生产环境下的用户数据、知识库等功能性文件持久化一律走 `DATA_ROOT`，不在 `docs/` 下操作。
 
 ---
 
@@ -323,5 +384,5 @@ export function getDataRoot(): string {
 * **输出页面**：给出完整的 `.tsx` 文件（React 函数组件, TypeScript, Tailwind classes）。
 * **大模型交互铁律**：大模型**只负责动脑子（推理、关联、出数据）**，生成文件的工作**坚决交给 TypeScript 工具层**。大模型只需把结构化 JSON 数据喂给工具即可。
 * **工具原子化铁律**：工具功能越单一越好，将控制权牢牢交在大模型手里。禁止写"缝合怪"工具。
-* **权限最小化铁律**：所有磁盘操作工具方法内，第一行必须是路径越权校验，限制在 `docs/` 目录范围内。
+* **权限最小化铁律**：服务端磁盘操作工具，第一行必须是路径越权校验，限制在 `DATA_ROOT` 目录范围内。客户端文件操作走 Tauri 原生 FS API，不经过服务端工具逻辑。
 * **流式优先铁律**：所有大模型交互接口必须采用流式响应（`streamText`），不得使用非流式的 `generateText` 阻塞等待完整响应。
