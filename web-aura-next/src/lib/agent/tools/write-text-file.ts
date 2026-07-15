@@ -19,7 +19,7 @@ export const writeTextFile = tool({
   description:
     "在 DATA_ROOT 工作空间中创建或覆盖纯文本文件。传入文件路径（相对于 DATA_ROOT 根目录，例如 'docs/first.md'、'workspaces/报告.txt'）和文本内容。会自动创建不存在的父目录，所以你可以直接写 'docs/first.md' 而无需先创建 docs 目录。适用于保存分析报告、脚本、配置文件、Markdown 文档等。",
   parameters: z.object({
-    filePath: z
+    path: z
       .string()
       .describe(
         "文件路径，相对于 DATA_ROOT 根目录，例如 'workspaces/report.md'"
@@ -28,10 +28,10 @@ export const writeTextFile = tool({
   }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   execute: async ({
-    filePath,
+    path: filePath,
     content,
   }: {
-    filePath: string;
+    path: string;
     content: string;
   }): Promise<string> => {
     try {

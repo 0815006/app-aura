@@ -69,10 +69,28 @@ export default function AgentWorkbench() {
 
   // 聊天
   const [chatInput, setChatInput] = useState("");
+
+  // ★ ref 追踪最新 workspaceId / modelConfig，使 transport body 函数能读到当前值
+  const workspaceIdRef = useRef(workspaceId);
+  workspaceIdRef.current = workspaceId;
+  const modelConfigRef = useRef(selectedModelConfig);
+  modelConfigRef.current = selectedModelConfig;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { messages, sendMessage, status, stop } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
+      // ★ body 为函数，每次发请求时动态求值，解决 useState 闭包过期问题
+      body: () => {
+        const extra: Record<string, unknown> = {};
+        if (workspaceIdRef.current) {
+          extra.workspaceId = workspaceIdRef.current;
+        }
+        if (modelConfigRef.current) {
+          extra.modelConfigId = modelConfigRef.current.id;
+        }
+        return extra;
+      },
     }),
   } as any);
 
@@ -142,13 +160,6 @@ export default function AgentWorkbench() {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || isLoading) return;
-
-    // ★ Phase 6: 根据选定模型配置发送额外参数
-    const body: Record<string, unknown> = {};
-
-    if (selectedModelConfig) {
-      body.modelConfigId = selectedModelConfig.id;
-    }
 
     sendMessage({ text: chatInput });
     setChatInput("");

@@ -136,7 +136,7 @@ export async function POST(req: Request) {
     const maxSteps: number = body.maxSteps ?? 15;
 
     console.log(
-      `[Aura Chat] ${rawMessages.length} 条消息, prompt: "${prompt.slice(0, 80)}"`
+      `[Aura Chat] ${rawMessages.length} 条消息, prompt: "${prompt.slice(0, 80)}", workspaceId=${workspaceId ?? "(无)"}`
     );
 
     // ============================================================
@@ -234,22 +234,27 @@ export async function POST(req: Request) {
     if (workspaceId && activeUserId) {
       const wsPath = getWorkspaceRootForUser(activeUserId, workspaceId);
       systemPrompt +=
-        `\n\n【当前工作空间】${wsPath}`;
+        `\n\n【当前工作空间】${wsPath}\n所有文件操作（create_directory / write_text_file / list_directory / read_file_full / preview_file_lines）都基于此工作空间根目录。你输入 'docs' 会自动解析为 ${wsPath}/docs。`;
+      console.log(`[Aura Chat] 工作空间上下文已注入: ${wsPath}`);
+    } else {
+      console.log(
+        `[Aura Chat] ⚠️ 未注入工作空间上下文 (workspaceId=${workspaceId}, userId=${activeUserId})`
+      );
     }
 
     // ============================================================
     // 4. 流式对话
     // ============================================================
 
-    // ★ 注入 workspace 上下文到所有工具
-    // 工具通过 runWithContext().workspaceId 感知到当前 workspace
+    // ★ 注入 workspace 上下文到所有工具 (globalThis 方式)
     const toolCtx: ToolContext = {
       userId: activeUserId,
       workspaceId,
     };
+    setToolContext(toolCtx);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await runWithContext(toolCtx, () => streamText({
+    const result = streamText({
       model: customProvider(activeModelName),
       system: systemPrompt,
       messages: aiMessages,
@@ -273,6 +278,9 @@ export async function POST(req: Request) {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       onFinish: async (event: any) => {
+        // ★ 工具执行完毕后清理上下文
+        clearToolContext();
+
         try {
           const { steps, finishReason } = event;
 
@@ -339,10 +347,16 @@ export async function POST(req: Request) {
       },
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any));
+    } as any);
 
-    return result.toUIMessageStreamResponse();
+    const response = result.toUIMessageStreamResponse();
+    // ★ clearToolContext 必须在 onFinish 中调用，不能在返回 response 后立即调用。
+    // 原因：streamText 同步返回 stream 对象，但工具执行发生在客户端消费流数据的过程中。
+    // 如果在 toUIMessageStreamResponse 后立即清理 globalThis，工具执行时上下文丢失，
+    // resolveWorkspaceAwarePath 回退到 resolveSafePath → 写到 DATA_ROOT/ 而非 workspace。
+    return response;
   } catch (error) {
+    clearToolContext();
     console.error("【Route 异常】", error);
     return new Response(
       JSON.stringify({

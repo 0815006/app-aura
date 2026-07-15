@@ -16,7 +16,7 @@ export const previewFileLines = tool({
   description:
     "读取文件前 N 行内容，用于预览大文件的开头部分。避免一次性读取整个大文件导致 Token 溢出。默认读取前 50 行，最多 200 行。",
   parameters: z.object({
-    filePath: z.string().describe("要预览的文件路径，相对于 DATA_ROOT 根目录"),
+    path: z.string().describe("要预览的文件路径，相对于 DATA_ROOT 根目录"),
     lines: z
       .number()
       .int()
@@ -27,10 +27,10 @@ export const previewFileLines = tool({
   }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   execute: async ({
-    filePath,
+    path: filePath,
     lines = 50,
   }: {
-    filePath: string;
+    path: string;
     lines?: number;
   }): Promise<string> => {
     try {
