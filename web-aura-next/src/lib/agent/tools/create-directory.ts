@@ -15,33 +15,37 @@ import fs from "fs";
 
 export const createDirectory = tool({
   description:
-    "在 DATA_ROOT 工作空间中创建目录。传入相对于 DATA_ROOT 的目录路径，会自动创建所有不存在的父目录。如果目录已存在则静默成功。示例：create_directory('docs') 会在根目录创建 docs 文件夹。",
+    "在当前工作空间根目录下创建目录。传入相对于工作空间根目录的路径，会自动创建所有不存在的父目录。如果目录已存在则静默成功。示例：create_directory('src') 会在根目录创建 src 文件夹。",
   parameters: z.object({
     path: z
       .string()
       .describe(
-        "要创建的目录路径，相对于 DATA_ROOT 根目录，例如 'docs'、'workspaces/my-ws/subdir'"
+        "要创建的目录路径，相对于工作空间根目录，例如 'src'、'docs/api'"
       ),
   }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   execute: async ({ path: dirPath }: { path: string }): Promise<string> => {
     try {
       const safePath = resolveWorkspaceAwarePath(dirPath);
+      console.log(`[createDirectory] 入参 path="${dirPath}", 解析后 safePath="${safePath}"`);
 
       if (fs.existsSync(safePath)) {
         return JSON.stringify({
           status: "success",
           dirPath,
+          resolvedPath: safePath,
           existed: true,
           message: `目录已存在: ${dirPath}`,
         });
       }
 
       fs.mkdirSync(safePath, { recursive: true });
+      console.log(`[createDirectory] ✅ 目录已创建: ${safePath}`);
 
       return JSON.stringify({
         status: "success",
         dirPath,
+        resolvedPath: safePath,
         existed: false,
         message: `目录已成功创建: ${dirPath}`,
       });

@@ -162,3 +162,121 @@ export const agentKnowledge = pgTable(
     userIdIdx: index("idx_agent_knowledge_user_id").on(table.userId),
   })
 );
+
+// ============================================================
+// 4. 运行记录表 (workspace_runs) —— 每次 Agent 多步循环记为一次 Run
+// ============================================================
+export const runStatusEnum = pgEnum("run_status", [
+  "running",
+  "completed",
+  "error",
+]);
+
+export const workspaceRuns = pgTable(
+  "workspace_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sessionId: varchar("session_id", { length: 255 }).notNull(),
+    userPrompt: text("user_prompt").notNull(),
+    finalResponse: text("final_response"),
+    promptTokens: integer("prompt_tokens").default(0),
+    completionTokens: integer("completion_tokens").default(0),
+    totalTokens: integer("total_tokens").default(0),
+    finishReason: varchar("finish_reason", { length: 50 }),
+    modelName: varchar("model_name", { length: 100 }),
+    status: runStatusEnum("status").default("completed").notNull(),
+    createTime: timestamp("create_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updateTime: timestamp("update_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    workspaceIdx: index("idx_runs_workspace").on(
+      table.workspaceId,
+      table.createTime.desc()
+    ),
+    sessionIdx: index("idx_runs_session").on(table.sessionId),
+    userIdIdx: index("idx_runs_user_id").on(table.userId),
+  })
+);
+
+// ============================================================
+// 5. 运行步骤表 (run_steps) —— 单次 Run 中每个 streamText step 的记录
+// ============================================================
+export const stepTypeEnum = pgEnum("step_type", [
+  "thought",
+  "tool-call",
+  "tool-result",
+]);
+
+export const runSteps = pgTable(
+  "run_steps",
+  {
+    id: serial("id").primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => workspaceRuns.id, { onDelete: "cascade" }),
+    stepNumber: integer("step_number").notNull(),
+    stepType: stepTypeEnum("step_type").notNull(),
+    thought: text("thought"),
+    toolName: varchar("tool_name", { length: 100 }),
+    toolArgs: jsonb("tool_args"),
+    toolResult: jsonb("tool_result"),
+    durationMs: integer("duration_ms"),
+    createTime: timestamp("create_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    runIdx: index("idx_steps_run").on(table.runId, table.stepNumber),
+  })
+);
+
+// ============================================================
+// 6. 工作空间记忆表 (workspace_memories) —— 长期记忆/上下文存储
+// ============================================================
+export const memoryCategoryEnum = pgEnum("memory_category", [
+  "tech-stack",
+  "convention",
+  "user-pref",
+  "fact",
+  "general",
+]);
+
+export const workspaceMemories = pgTable(
+  "workspace_memories",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    key: varchar("key", { length: 255 }).notNull(),
+    content: text("content").notNull(),
+    category: memoryCategoryEnum("category").default("general").notNull(),
+    importance: integer("importance").default(0),
+    sourceRunId: uuid("source_run_id").references(() => workspaceRuns.id, {
+      onDelete: "set null",
+    }),
+    createTime: timestamp("create_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updateTime: timestamp("update_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    workspaceIdx: index("idx_memories_workspace").on(table.workspaceId),
+    uniqueWorkspaceKey: uniqueIndex("uidx_workspace_memory_key").on(
+      table.workspaceId,
+      table.key
+    ),
+  })
+);

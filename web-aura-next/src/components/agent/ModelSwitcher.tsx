@@ -74,7 +74,7 @@ export function ModelSwitcher({ selectedConfigId, onSelect }: ModelSwitcherProps
         className="flex items-center gap-2 px-3 py-1.5 bg-aura-hover hover:bg-aura-border border border-aura-border rounded-lg text-xs text-aura-text transition-colors"
         title="切换模型"
       >
-        <span className="text-aura-text-muted">🤖</span>
+        <img src="/aura.svg" alt="Aura" className="w-4 h-4 flex-shrink-0 opacity-70" />
         {loading ? (
           <span className="text-aura-text-muted">加载中...</span>
         ) : selected ? (

@@ -47,7 +47,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <span className="text-5xl">🧠</span>
+          <img src="/aura.svg" alt="Aura" className="w-16 h-16 mx-auto" />
           <h1 className="text-3xl font-bold text-emerald-400 mt-3">Aura</h1>
           <p className="text-aura-text-muted text-sm mt-2">
             多场景通用智能体工作台

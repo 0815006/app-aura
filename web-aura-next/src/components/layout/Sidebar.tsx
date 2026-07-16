@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useLayout } from "./Layout";
 import { useTheme } from "../theme/ThemeProvider";
 
@@ -8,19 +9,25 @@ interface NavItem {
   id: string;
   label: string;
   icon: string;
+  path: string;
 }
 
 const navItems: NavItem[] = [
-  { id: "workbench", label: "智能体工作台", icon: "🤖" },
-  { id: "knowledge", label: "知识库", icon: "📚" },
-  { id: "tools", label: "工具箱", icon: "🧰" },
-  { id: "settings", label: "系统设置", icon: "⚙️" },
+  { id: "workbench", label: "智能体工作台", icon: "🤖", path: "/" },
+  { id: "knowledge", label: "知识库", icon: "📚", path: "/knowledge" },
+  { id: "capabilities", label: "智能体能力", icon: "🧰", path: "/capabilities" },
+  { id: "settings", label: "系统设置", icon: "⚙️", path: "/settings" },
 ];
 
 export function Sidebar() {
   const { collapsed } = useLayout();
   const { theme, toggleTheme } = useTheme();
-  const [activeId, setActiveId] = React.useState("workbench");
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // 根据当前路由自动判定活跃项
+  const activeId =
+    navItems.find((item) => item.path === pathname)?.id ?? "workbench";
 
   return (
     <aside
@@ -36,7 +43,7 @@ export function Sidebar() {
           {navItems.map((item) => (
             <li key={item.id}>
               <button
-                onClick={() => setActiveId(item.id)}
+                onClick={() => router.push(item.path)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                   activeId === item.id
                     ? "bg-emerald-600/20 text-emerald-400"
@@ -44,7 +51,11 @@ export function Sidebar() {
                 }`}
                 title={collapsed ? item.label : undefined}
               >
-                <span className="text-lg flex-shrink-0">{item.icon}</span>
+                {item.id === "workbench" ? (
+                  <img src="/aura.svg" alt="Aura" className="w-5 h-5 flex-shrink-0" />
+                ) : (
+                  <span className="text-lg flex-shrink-0">{item.icon}</span>
+                )}
                 {!collapsed && (
                   <span className="truncate">{item.label}</span>
                 )}

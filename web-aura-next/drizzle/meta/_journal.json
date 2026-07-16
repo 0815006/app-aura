@@ -15,6 +15,13 @@
       "when": 1784084710239,
       "tag": "0001_right_ronan",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784182793743,
+      "tag": "0002_next_triathlon",
+      "breakpoints": true
     }
   ]
 }

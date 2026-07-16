@@ -65,18 +65,39 @@ export async function GET(req: Request) {
     const dataRoot = getDataRoot();
     const userRoot = path.resolve(dataRoot, "workspaces", `user_${auth.userId}`);
     const workspaceRoot = path.resolve(userRoot, workspaceId);
-    const targetDir = path.resolve(workspaceRoot, subpath);
+    let targetDir = path.resolve(workspaceRoot, subpath);
+
+    // ★ 兼容旧版工作空间（迁移前没有 user_{id} 子目录）
+    // 如果新版路径不存在，尝试旧版路径并自动迁移
+    if (!fs.existsSync(workspaceRoot)) {
+      const legacyRoot = path.resolve(dataRoot, "workspaces", workspaceId);
+      if (fs.existsSync(legacyRoot)) {
+        console.log(
+          `[Tree API] 检测到旧版工作空间目录，迁移中: ${legacyRoot} → ${workspaceRoot}`
+        );
+        try {
+          // 确保父目录存在
+          fs.mkdirSync(userRoot, { recursive: true });
+          // 重命名迁移
+          fs.renameSync(legacyRoot, workspaceRoot);
+          console.log(`[Tree API] ✅ 工作空间目录已迁移: ${workspaceRoot}`);
+        } catch (migErr) {
+          console.error(`[Tree API] 迁移失败，回退到旧版路径:`, migErr);
+          // 迁移失败时使用旧路径（兼容运行）
+          targetDir = path.resolve(legacyRoot, subpath);
+        }
+      } else {
+        // 新路径和旧路径都不存在，自动创建
+        fs.mkdirSync(workspaceRoot, { recursive: true });
+        fs.mkdirSync(path.join(workspaceRoot, ".meta"), { recursive: true });
+        console.log(`[Tree API] 已创建工作空间目录: ${workspaceRoot}`);
+      }
+    }
 
     // 双重校验：不得跳出工作空间，不得跳出用户目录
-    if (!targetDir.startsWith(workspaceRoot)) {
+    if (!targetDir.startsWith(workspaceRoot) && !targetDir.startsWith(path.resolve(dataRoot, "workspaces", workspaceId))) {
       return Response.json(
         { code: 403, message: "路径越权" },
-        { status: 403 }
-      );
-    }
-    if (!targetDir.startsWith(userRoot)) {
-      return Response.json(
-        { code: 403, message: "路径越权：禁止访问其他用户的工作空间" },
         { status: 403 }
       );
     }

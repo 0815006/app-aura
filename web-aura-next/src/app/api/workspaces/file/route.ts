@@ -61,18 +61,23 @@ export async function GET(req: Request) {
     const dataRoot = getDataRoot();
     const userRoot = path.resolve(dataRoot, "workspaces", `user_${auth.userId}`);
     const workspaceRoot = path.resolve(userRoot, workspaceId);
-    const targetPath = path.resolve(workspaceRoot, filePath);
+    let targetPath = path.resolve(workspaceRoot, filePath);
+
+    // ★ 兼容旧版工作空间（同 tree API 逻辑）
+    if (!fs.existsSync(workspaceRoot)) {
+      const legacyRoot = path.resolve(dataRoot, "workspaces", workspaceId);
+      if (fs.existsSync(legacyRoot)) {
+        console.log(
+          `[File API] 检测到旧版工作空间目录，使用旧路径: ${legacyRoot}`
+        );
+        targetPath = path.resolve(legacyRoot, filePath);
+      }
+    }
 
     // 双重校验
-    if (!targetPath.startsWith(workspaceRoot)) {
+    if (!targetPath.startsWith(workspaceRoot) && !targetPath.startsWith(path.resolve(dataRoot, "workspaces", workspaceId))) {
       return Response.json(
         { code: 403, message: "路径越权" },
-        { status: 403 }
-      );
-    }
-    if (!targetPath.startsWith(userRoot)) {
-      return Response.json(
-        { code: 403, message: "路径越权：禁止访问其他用户的工作空间" },
         { status: 403 }
       );
     }

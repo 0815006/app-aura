@@ -15,7 +15,7 @@ export const readFileFull = tool({
   description:
     "读取指定文件的完整文本内容。仅适用于小于 500KB 的文本文件。对于大文件，请先用 preview_file_lines 预览。返回文件内容字符串。",
   parameters: z.object({
-    path: z.string().describe("要读取的文件路径，相对于 DATA_ROOT 根目录"),
+    path: z.string().describe("要读取的文件路径，相对于工作空间根目录，例如 'src/Main.java'"),
   }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   execute: async ({ path: filePath }: { path: string }): Promise<string> => {

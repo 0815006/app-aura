@@ -18,7 +18,7 @@ export const generateStructuredExcel = tool({
     filePath: z
       .string()
       .describe(
-        "输出的 .xlsx 文件路径，相对于 DATA_ROOT 根目录，例如 'workspaces/analysis_result.xlsx'"
+        "输出的 .xlsx 文件路径，相对于工作空间根目录，例如 'output/analysis_result.xlsx'"
       ),
     sheetName: z.string().default("Sheet1").describe("工作表名称"),
     columns: z

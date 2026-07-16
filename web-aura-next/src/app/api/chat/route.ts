@@ -2,13 +2,20 @@ import { createDeepSeek } from "@ai-sdk/deepseek";
 import { streamText } from "ai";
 
 import { db } from "@/lib/db/client";
-import { chatMessages, userModelConfigs } from "@/lib/db/schema";
+import {
+  chatMessages,
+  userModelConfigs,
+  workspaceRuns,
+  runSteps,
+  workspaceMemories,
+} from "@/lib/db/schema";
 import { ensureDataDirs, isServerMode, getWorkspaceRootForUser } from "@/lib/env";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { decrypt } from "@/lib/auth/crypto";
 import { setToolContext, clearToolContext } from "@/lib/agent/tool-context";
 import type { ToolContext } from "@/lib/agent/tool-context";
-import { eq, and } from "drizzle-orm";
+import { extractAndSaveMemories } from "@/lib/agent/memory-extractor";
+import { eq, and, desc } from "drizzle-orm";
 
 import {
   listDirectory,
@@ -20,6 +27,7 @@ import {
   executePythonCode,
   webSearch,
   httpRequest,
+  updateMemory,
 } from "@/lib/agent/tools";
 
 /**
@@ -60,6 +68,9 @@ const auraTools = {
   // 四、外部世界连接类
   webSearch,
   httpRequest,
+
+  // 五、工作空间记忆管理
+  updateMemory,
 };
 
 // ============================================================
@@ -226,8 +237,13 @@ export async function POST(req: Request) {
     // ============================================================
 
     let systemPrompt =
-      "你是 Aura Agent。用户消息 = 命令，必须立即调工具，禁止先输出文字。" +
-      "工具: create_directory, write_text_file(自动建父目录), list_directory, read_file_full, preview_file_lines, web_search, http_request, execute_python_code, generate_structured_excel。" +
+      "你是 Aura Agent，一个智能体工作台助手。" +
+      "核心规则：\n" +
+      "1. 每次收到用户消息，先简要说明你的计划（1-2句话），然后立即调用工具执行。\n" +
+      "2. 每次工具调用返回结果后，简要解读结果并说明下一步动作，然后再调用下一个工具。\n" +
+      "3. 所有任务完成后，给出总结性回复。\n" +
+      "4. 使用中文回复。\n\n" +
+      "可用工具: create_directory, write_text_file(自动建父目录), list_directory, read_file_full, preview_file_lines, web_search, http_request, execute_python_code, generate_structured_excel, update_memory。" +
       "路径: 根目录='.'。示例: create_directory('docs') → write_text_file('docs/f.md','内容')。";
 
     // 注入工作空间上下文
@@ -240,6 +256,31 @@ export async function POST(req: Request) {
       console.log(
         `[Aura Chat] ⚠️ 未注入工作空间上下文 (workspaceId=${workspaceId}, userId=${activeUserId})`
       );
+    }
+
+    // ★ 注入工作空间长期记忆
+    if (workspaceId) {
+      try {
+        const memories = await db.query.workspaceMemories.findMany({
+          where: eq(workspaceMemories.workspaceId, workspaceId),
+          orderBy: desc(workspaceMemories.importance),
+          limit: 20,
+        });
+
+        if (memories.length > 0) {
+          const memoryLines = memories.map(
+            (m) =>
+              `- [${m.category}] **${m.key}**: ${m.content.slice(0, 300)}`
+          );
+          systemPrompt +=
+            `\n\n【工作空间长期记忆】以下是从历史对话中积累的关于本项目的关键信息，请在决策时参考：\n${memoryLines.join("\n")}`;
+          console.log(
+            `[Aura Chat] 已注入 ${memories.length} 条工作空间记忆`
+          );
+        }
+      } catch (memErr) {
+        console.error("[Aura Chat] 加载工作空间记忆失败:", memErr);
+      }
     }
 
     // ============================================================
@@ -260,7 +301,7 @@ export async function POST(req: Request) {
       messages: aiMessages,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       tools: auraTools as any,
-      // ★ 强制模型优先选择工具调用（而非输出文字）
+      // ★ 自动选择：模型自主决定何时调用工具、何时输出文字
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       toolChoice: "auto" as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -276,17 +317,40 @@ export async function POST(req: Request) {
         }
       },
 
+      // ★ onStepFinish: 每个 step 完成时实时记录（调试 & 增量持久化预留）
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      onStepFinish: async (event: any) => {
+        const { stepNumber, stepType, text, toolCalls, toolResults } = event;
+        const tcSummary =
+          toolCalls
+            ?.map((tc: any) => `${tc.toolName}(${JSON.stringify(tc.args).slice(0, 80)})`)
+            .join(", ") ?? "N/A";
+        const trSummary =
+          toolResults
+            ?.map((tr: any) => {
+              const preview =
+                typeof tr.result === "string"
+                  ? tr.result.slice(0, 100)
+                  : JSON.stringify(tr.result).slice(0, 100);
+              return `${tr.toolName}: ${preview}`;
+            })
+            .join("; ") ?? "N/A";
+        console.log(
+          `[Aura Chat] Step #${stepNumber} [${stepType}]: text="${(text ?? "").slice(0, 100)}", tools=[${tcSummary}], results=[${trSummary}]`
+        );
+      },
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       onFinish: async (event: any) => {
         // ★ 工具执行完毕后清理上下文
         clearToolContext();
 
         try {
-          const { steps, finishReason } = event;
+          const { steps, finishReason, usage } = event;
 
           // ★ 诊断日志
           console.log(
-            `[Aura Chat] onFinish: finishReason=${finishReason}, stepCount=${steps?.length ?? 0}`
+            `[Aura Chat] onFinish: finishReason=${finishReason}, stepCount=${steps?.length ?? 0}, tokens=${usage?.totalTokens ?? 0}`
           );
           if (steps && Array.isArray(steps)) {
             steps.forEach((s: any, i: number) => {
@@ -300,6 +364,10 @@ export async function POST(req: Request) {
           }
 
           if (!isServerMode() || !activeUserId) return;
+
+          // ============================================================
+          // 1. 持久化 chatMessages（原有逻辑）
+          // ============================================================
 
           if (prompt) {
             await db.insert(chatMessages).values([
@@ -320,22 +388,172 @@ export async function POST(req: Request) {
               .filter(Boolean)
               .join("\n") ?? "";
 
-          if (responseText) {
+          // ★ 从 steps 中提取完整的工具调用数据（含参数和结果）
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const allToolCalls: any[] = [];
+          if (steps && Array.isArray(steps)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            for (const step of steps as any[]) {
+              if (step.toolCalls && Array.isArray(step.toolCalls)) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                for (const tc of step.toolCalls as any[]) {
+                  // 匹配同一步骤中的工具结果
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const matchingResult = step.toolResults?.find(
+                    (tr: any) => tr.toolName === tc.toolName
+                  );
+                  allToolCalls.push({
+                    toolName: tc.toolName ?? "unknown",
+                    args: tc.args ?? {},
+                    result: matchingResult?.result ?? null,
+                  });
+                }
+              }
+            }
+          }
+
+          if (responseText || allToolCalls.length > 0) {
             await db.insert(chatMessages).values([
               {
                 sessionId,
                 workspaceId: workspaceId || null,
                 userId: activeUserId,
                 role: "assistant",
-                content: responseText,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                toolCalls: steps?.map((s: any) => ({
-                  toolName: s.toolName,
-                  args: s.args,
-                  result: s.result,
-                })),
+                content: responseText || "(工具执行完成)",
+                toolCalls: allToolCalls.length > 0 ? allToolCalls : null,
               },
             ]);
+          }
+
+          // ============================================================
+          // 2. ★ 新增：持久化 Run 记录
+          // ============================================================
+
+          if (!workspaceId) {
+            console.log("[Aura Chat] 无 workspaceId，跳过 Run 持久化");
+            return;
+          }
+
+          // 生成 toolSummary 供记忆提取使用
+          const toolResultsForMemory: string[] = [];
+
+          // 2.1 插入 workspace_runs
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const [insertedRun] = await db
+            .insert(workspaceRuns)
+            .values({
+              workspaceId,
+              userId: activeUserId,
+              sessionId,
+              userPrompt: prompt,
+              finalResponse: responseText || null,
+              promptTokens: usage?.promptTokens ?? 0,
+              completionTokens: usage?.completionTokens ?? 0,
+              totalTokens: usage?.totalTokens ?? 0,
+              finishReason: finishReason ?? "stop",
+              modelName: activeModelName,
+              status: "completed",
+            })
+            .returning({ id: workspaceRuns.id });
+
+          const runId = insertedRun?.id;
+          if (!runId) {
+            console.error("[Aura Chat] Run 记录插入失败，跳过 Step 持久化");
+            return;
+          }
+
+          console.log(`[Aura Chat] Run 已持久化: ${runId}`);
+
+          // 2.2 插入 run_steps（遍历每个 step）
+          if (steps && Array.isArray(steps)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            for (let i = 0; i < steps.length; i++) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const step: any = steps[i];
+              const now = new Date();
+
+              // a. 如果有思考文本（stepType === 'thought' 或 step.text 非空且无 toolCalls）
+              const thoughtText: string =
+                typeof step.text === "string" ? step.text : "";
+              const hasText = thoughtText.trim().length > 0;
+
+              if (hasText) {
+                await db.insert(runSteps).values({
+                  runId,
+                  stepNumber: i + 1,
+                  stepType: "thought",
+                  thought: thoughtText,
+                  createTime: now,
+                });
+              }
+
+              // b. 工具调用
+              if (
+                step.toolCalls &&
+                Array.isArray(step.toolCalls) &&
+                step.toolCalls.length > 0
+              ) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                for (const tc of step.toolCalls as any[]) {
+                  await db.insert(runSteps).values({
+                    runId,
+                    stepNumber: i + 1,
+                    stepType: "tool-call",
+                    toolName: tc.toolName ?? "unknown",
+                    toolArgs: tc.args ?? null,
+                    createTime: now,
+                  });
+
+                  // 收集工具结果用于记忆提取
+                  if (tc.toolName && tc.args) {
+                    toolResultsForMemory.push(
+                      `${tc.toolName}(${JSON.stringify(tc.args).slice(0, 200)})`
+                    );
+                  }
+                }
+              }
+
+              // c. 工具结果
+              if (
+                step.toolResults &&
+                Array.isArray(step.toolResults) &&
+                step.toolResults.length > 0
+              ) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                for (const tr of step.toolResults as any[]) {
+                  await db.insert(runSteps).values({
+                    runId,
+                    stepNumber: i + 1,
+                    stepType: "tool-result",
+                    toolName: tr.toolName ?? "unknown",
+                    toolResult:
+                      typeof tr.result === "string"
+                        ? { output: tr.result }
+                        : (tr.result ?? null),
+                    createTime: now,
+                  });
+                }
+              }
+            }
+          }
+
+          // ============================================================
+          // 3. ★ 新增：触发记忆自动提取（fire-and-forget）
+          // ============================================================
+
+          if (workspaceId && prompt && responseText) {
+            extractAndSaveMemories({
+              workspaceId,
+              runId,
+              userPrompt: prompt,
+              finalResponse: responseText,
+              toolSummary: toolResultsForMemory.join("; "),
+              apiKey: activeApiKey,
+              baseUrl: activeBaseUrl,
+              modelName: activeModelName,
+            }).catch((extractErr) => {
+              console.error("[Aura Chat] 记忆提取异常:", extractErr);
+            });
           }
         } catch (dbErr) {
           console.error("[Aura Chat] 会话持久化失败:", dbErr);

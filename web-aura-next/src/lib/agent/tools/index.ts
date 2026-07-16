@@ -32,5 +32,6 @@ export { generateStructuredExcel } from "./generate-structured-excel";
 export { executePythonCode } from "./execute-python-code";
 export { webSearch } from "./web-search";
 export { httpRequest } from "./http-request";
+export { updateMemory } from "./update-memory";
 
 export type ToolCategory = "dba" | "perf" | "monitor" | "common";

@@ -13,12 +13,12 @@ import path from "path";
 
 export const listDirectory = tool({
   description:
-    "获取指定目录下的子目录和文件列表。用于浏览 DATA_ROOT 工作空间目录结构。返回 JSON 格式的目录树。",
+    "获取当前工作空间指定目录下的子目录和文件列表。返回 JSON 格式的目录树。",
   parameters: z.object({
     path: z
       .string()
       .describe(
-        "要浏览的目录路径，相对于 DATA_ROOT 根目录，例如 '' 表示根目录、'workspaces' 表示子目录"
+        "要浏览的目录路径，相对于工作空间根目录，例如 '' 表示根目录、'src' 表示子目录"
       ),
   }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -53,17 +53,29 @@ export function resolveWorkspaceAwarePath(userPath: string): string {
     const targetPath = path.resolve(workspaceRoot, userPath);
 
     if (!targetPath.startsWith(workspaceRoot)) {
+      console.error(
+        `[ToolContext] ❌ 路径越权拒绝: userPath="${userPath}" → targetPath="${targetPath}", workspaceRoot="${workspaceRoot}"`
+      );
       throw new Error(`路径越权：禁止访问工作空间以外的文件 (${userPath})`);
     }
     if (!targetPath.startsWith(userRoot)) {
+      console.error(
+        `[ToolContext] ❌ 跨用户越权拒绝: userPath="${userPath}" → targetPath="${targetPath}", userRoot="${userRoot}"`
+      );
       throw new Error(`路径越权：禁止访问其他用户的工作空间 (${userPath})`);
     }
-    console.log(`[ToolContext] workspace 路径解析: "${userPath}" → "${targetPath}"`);
+    console.log(
+      `[ToolContext] ✅ workspace 路径: "${userPath}" → "${targetPath}" (userId=${ctx.userId}, wsId=${ctx.workspaceId})`
+    );
     return targetPath;
   }
 
-  // 无上下文：回退
+  // 无上下文：回退到 DATA_ROOT
   const fallback = resolveSafePath(userPath);
-  console.log(`[ToolContext] ⚠️ 无工作空间上下文，回退到 DATA_ROOT: "${userPath}" → "${fallback}"`);
+  console.log(
+    `[ToolContext] ⚠️ 无工作空间上下文，回退到 DATA_ROOT: "${userPath}" → "${fallback}" (ctx=${
+      ctx ? `userId=${ctx.userId}, wsId=${ctx.workspaceId}` : "undefined"
+    })`
+  );
   return fallback;
 }
