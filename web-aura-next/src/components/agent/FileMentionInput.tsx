@@ -258,18 +258,24 @@ export const FileMentionInput = forwardRef<
   );
 
   // ============================================================
-  // textarea 值变更
+  // textarea 值变更（只更新 value，mention 检测统一在 handleKeyUp 中处理）
   // ============================================================
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const newValue = e.target.value;
-      setValue(newValue);
+      setValue(e.target.value);
+    },
+    []
+  );
 
-      // 延迟检测（等 state 更新后）
-      const cursorPos = e.target.selectionStart;
-      const detected = detectMentionAtCursor(newValue, cursorPos);
+  // ============================================================
+  // keyUp：在 DOM 完全更新后检测 @mention
+  // ============================================================
 
+  const handleKeyUp = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      const ta = e.currentTarget;
+      const detected = detectMentionAtCursor(ta.value, ta.selectionStart);
       if (detected) {
         setMentionQuery(detected.query);
         setShowDropdown(true);
@@ -281,37 +287,6 @@ export const FileMentionInput = forwardRef<
       }
     },
     [detectMentionAtCursor]
-  );
-
-  // ============================================================
-  // 键盘处理（光标移动时重新检测 @）
-  // ============================================================
-
-  const handleKeyUp = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      // 光标移动键或点击导致的光标变化
-      if (
-        e.key === "ArrowLeft" ||
-        e.key === "ArrowRight" ||
-        e.key === "ArrowUp" ||
-        e.key === "ArrowDown" ||
-        e.key === "Home" ||
-        e.key === "End"
-      ) {
-        const ta = e.currentTarget;
-        const detected = detectMentionAtCursor(ta.value, ta.selectionStart);
-        if (detected) {
-          setMentionQuery(detected.query);
-          setShowDropdown(true);
-          mentionAtPosRef.current = detected.atIndex;
-        } else if (showDropdown) {
-          setShowDropdown(false);
-          setMentionQuery("");
-          mentionAtPosRef.current = -1;
-        }
-      }
-    },
-    [detectMentionAtCursor, showDropdown]
   );
 
   // ============================================================
@@ -505,7 +480,7 @@ export const FileMentionInput = forwardRef<
           ref={dropdownRef}
           className="absolute left-0 z-50 w-full max-h-56 overflow-y-auto
                      bg-aura-bg border border-aura-border rounded-lg shadow-xl
-                     py-1 top-full mt-1"
+                     py-1 bottom-full mb-1"
         >
           <div className="px-3 py-1.5 text-[10px] text-aura-text-muted uppercase tracking-wider border-b border-aura-border">
             📁 工作空间文件

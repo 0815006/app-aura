@@ -1005,9 +1005,7 @@ export default function AgentWorkbench() {
                     </span>
 
                     <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                      {textContent && <p>{textContent}</p>}
-
-                      {/* ★ StepTimeline: 步骤时间线 */}
+                      {/* ★ StepTimeline: 步骤时间线（思考/工具调用在前，最终输出在后） */}
                       {(() => {
                         if (!msg.parts) return null;
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1045,6 +1043,9 @@ export default function AgentWorkbench() {
                           />
                         );
                       })()}
+
+                      {/* ★ 最终文本输出（步骤时间线之后） */}
+                      {textContent && <p className="mt-2">{textContent}</p>}
 
                       {/* ★ 流式加载指示器（只在最后一条 assistant 消息流式传输时显示） */}
                       {isStreamingMessage && msg.role === "assistant" && (
