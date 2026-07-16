@@ -2,9 +2,10 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { useState, useCallback, useRef, useEffect, type FormEvent } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { WorkspaceTree } from "@/components/agent/WorkspaceTree";
+import { FileMentionInput, type FileMentionInputHandle } from "@/components/agent/FileMentionInput";
 import { DraggableSplitter } from "@/components/agent/DraggableSplitter";
 import { ModelSwitcher, type ModelConfigSafe } from "@/components/agent/ModelSwitcher";
 import { ModelConfigPanel } from "@/components/agent/ModelConfigPanel";
@@ -128,7 +129,8 @@ export default function AgentWorkbench() {
   const [modelSwitchKey, setModelSwitchKey] = useState(0); // 用于刷新 ModelSwitcher
 
   // 聊天
-  const [chatInput, setChatInput] = useState("");
+  const [clearToken, setClearToken] = useState(0);
+  const mentionInputRef = useRef<FileMentionInputHandle>(null);
 
   // ★ 会话（Session）管理
   const [chatId, setChatId] = useState<string | null>(null); // 当前活跃会话 ID
@@ -523,9 +525,8 @@ export default function AgentWorkbench() {
   // 聊天提交
   // ============================================================
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim() || isLoading) return;
+  const handleSubmit = useCallback((value: string) => {
+    if (!value.trim() || isLoading) return;
 
     // ★ 新对话自动生成 chatId（服务端 onFinish 用此 session 标识持久化）
     const currentChatId = chatIdRef.current ?? crypto.randomUUID();
@@ -533,11 +534,11 @@ export default function AgentWorkbench() {
       chatIdRef.current = currentChatId;
       setChatId(currentChatId);
       // 新会话：用第一条用户消息作为标题
-      setSessionTitle(chatInput.trim().slice(0, 60));
+      setSessionTitle(value.trim().slice(0, 60));
     }
 
-    sendMessage({ text: chatInput });
-    setChatInput("");
+    sendMessage({ text: value });
+    setClearToken((prev) => prev + 1);
 
     // 聊天后刷新文件树（可能有新文件生成）
     setRefreshToken((prev) => prev + 1);
@@ -546,7 +547,7 @@ export default function AgentWorkbench() {
     setTimeout(() => {
       fetchRecentSessions();
     }, 1500);
-  };
+  }, [isLoading, sendMessage, fetchRecentSessions]);
 
   const handleModelConfigChanged = () => {
     // 模型配置变更后刷新选择器
@@ -1067,25 +1068,23 @@ export default function AgentWorkbench() {
           </div>
 
           {/* 输入区 */}
-          <form
-            onSubmit={handleSubmit}
-            className="p-4 border-t border-aura-border bg-aura-bg"
-          >
+          <div className="p-4 border-t border-aura-border bg-aura-bg">
             <div className="flex gap-2">
-              <input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
+              <FileMentionInput
+                ref={mentionInputRef}
                 placeholder={
                   workspaceId
-                    ? "给智能体下达指令 (支持 @文件名 引用)..."
+                    ? "给智能体下达指令 (输入 @ 引用文件)..."
                     : "请先创建或载入工作空间..."
                 }
-                className="flex-1 bg-aura-hover border border-aura-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-aura-text placeholder-aura-text-muted transition-colors"
                 disabled={isLoading || !workspaceId}
+                workspaceId={workspaceId}
+                onSubmit={handleSubmit}
+                clearToken={clearToken}
               />
               <button
-                type="submit"
-                disabled={isLoading || !chatInput.trim() || !workspaceId}
+                onClick={() => mentionInputRef.current?.submit()}
+                disabled={isLoading || !workspaceId}
                 className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-aura-hover disabled:text-aura-text-muted text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed"
               >
                 {isLoading ? "思考中..." : "发送"}
@@ -1100,7 +1099,7 @@ export default function AgentWorkbench() {
                 </button>
               )}
             </div>
-          </form>
+          </div>
         </div>
       </div>
 
