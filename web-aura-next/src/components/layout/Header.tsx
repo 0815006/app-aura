@@ -17,14 +17,14 @@ export function Header() {
 
   return (
     <header
-      className="flex items-center justify-between px-4 h-12 border-b border-slate-700 bg-slate-950"
+      className="flex items-center justify-between px-4 h-12 border-b border-aura-border bg-aura-bg"
       style={{ minHeight: 48 }}
     >
       {/* 左侧：折叠按钮 + Logo */}
       <div className="flex items-center gap-3">
         <button
           onClick={toggleCollapsed}
-          className="text-slate-400 hover:text-slate-200 transition-colors p-1 rounded hover:bg-slate-800"
+          className="text-aura-text-secondary hover:text-aura-text transition-colors p-1 rounded hover:bg-aura-hover"
           title={collapsed ? "展开侧边栏" : "折叠侧边栏"}
         >
           <svg
@@ -54,7 +54,7 @@ export function Header() {
       <div className="flex items-center gap-3">
         {user ? (
           <>
-            <div className="flex items-center gap-2 text-sm text-slate-400">
+            <div className="flex items-center gap-2 text-sm text-aura-text-secondary">
               <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold">
                 {(user.displayName || user.username).charAt(0).toUpperCase()}
               </div>
@@ -65,7 +65,7 @@ export function Header() {
 
             <button
               onClick={handleLogout}
-              className="text-sm text-slate-400 hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+              className="text-sm text-aura-text-secondary hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-aura-hover"
               title="登出"
             >
               登出
@@ -74,7 +74,7 @@ export function Header() {
         ) : (
           <button
             onClick={() => router.push("/login")}
-            className="text-sm text-slate-400 hover:text-emerald-400 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+            className="text-sm text-aura-text-secondary hover:text-emerald-400 transition-colors px-2 py-1 rounded hover:bg-aura-hover"
           >
             登录
           </button>

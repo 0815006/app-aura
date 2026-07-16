@@ -194,15 +194,15 @@ export function ModelConfigPanel({
       />
 
       {/* 面板 */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-slate-900 border-l border-slate-700 shadow-2xl flex flex-col">
+      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-aura-surface border-l border-aura-border shadow-2xl flex flex-col">
         {/* 头部 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
-          <h2 className="text-lg font-bold text-slate-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-aura-border">
+          <h2 className="text-lg font-bold text-aura-text">
             {editingId ? "编辑模型配置" : "模型配置管理"}
           </h2>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-200 transition-colors p-1"
+            className="text-aura-text-secondary hover:text-aura-text transition-colors p-1"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -222,34 +222,34 @@ export function ModelConfigPanel({
           {/* 新增/编辑表单 */}
           {editingId !== null || configs.length === 0 ? (
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-300">
+              <h3 className="text-sm font-semibold text-aura-text">
                 {editingId ? "编辑配置" : "新增模型配置"}
               </h3>
 
               <div>
-                <label className="block text-xs text-slate-400 mb-1">标签 *</label>
+                <label className="block text-xs text-aura-text-secondary mb-1">标签 *</label>
                 <input
                   type="text"
                   value={form.label}
                   onChange={(e) => setForm({ ...form, label: e.target.value })}
                   placeholder="例如: 生产环境 DeepSeek"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-aura-hover border border-aura-border rounded-lg px-3 py-2 text-sm text-aura-text placeholder-aura-text-muted focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-slate-400 mb-1">模型名 *</label>
+                <label className="block text-xs text-aura-text-secondary mb-1">模型名 *</label>
                 <input
                   type="text"
                   value={form.modelName}
                   onChange={(e) => setForm({ ...form, modelName: e.target.value })}
                   placeholder="例如: deepseek-chat"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-aura-hover border border-aura-border rounded-lg px-3 py-2 text-sm text-aura-text placeholder-aura-text-muted focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-slate-400 mb-1">
+                <label className="block text-xs text-aura-text-secondary mb-1">
                   API Key {!editingId && "*"} {editingId ? "(留空则不修改)" : ""}
                 </label>
                 <input
@@ -257,18 +257,18 @@ export function ModelConfigPanel({
                   value={form.apiKey}
                   onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
                   placeholder="sk-..."
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-aura-hover border border-aura-border rounded-lg px-3 py-2 text-sm text-aura-text placeholder-aura-text-muted focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Base URL</label>
+                <label className="block text-xs text-aura-text-secondary mb-1">Base URL</label>
                 <input
                   type="text"
                   value={form.baseUrl}
                   onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
                   placeholder="https://api.deepseek.com/v1"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-aura-hover border border-aura-border rounded-lg px-3 py-2 text-sm text-aura-text placeholder-aura-text-muted focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
@@ -277,23 +277,23 @@ export function ModelConfigPanel({
                   type="checkbox"
                   checked={form.isDefault}
                   onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-                  className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500"
+                  className="rounded border-aura-border bg-aura-hover text-emerald-500 focus:ring-emerald-500"
                 />
-                <span className="text-sm text-slate-400">设为默认模型</span>
+                <span className="text-sm text-aura-text-secondary">设为默认模型</span>
               </label>
 
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={handleSubmit}
                   disabled={submitting}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-aura-hover disabled:text-aura-text-muted text-white py-2 rounded-lg text-sm font-medium transition-colors"
                 >
                   {submitting ? "提交中..." : editingId ? "保存修改" : "新增"}
                 </button>
                 {editingId && (
                   <button
                     onClick={handleCancelEdit}
-                    className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
+                    className="px-4 py-2 text-sm text-aura-text-secondary hover:text-aura-text bg-aura-hover hover:bg-aura-border rounded-lg transition-colors"
                   >
                     取消
                   </button>
@@ -303,7 +303,7 @@ export function ModelConfigPanel({
           ) : (
             <button
               onClick={() => setEditingId("__new__")}
-              className="w-full py-3 border-2 border-dashed border-slate-700 rounded-lg text-sm text-slate-500 hover:text-emerald-400 hover:border-emerald-600 transition-colors"
+              className="w-full py-3 border-2 border-dashed border-aura-border rounded-lg text-sm text-aura-text-muted hover:text-emerald-400 hover:border-emerald-600 transition-colors"
             >
               + 新增模型配置
             </button>
@@ -311,20 +311,20 @@ export function ModelConfigPanel({
 
           {/* 配置列表 */}
           {loading ? (
-            <div className="text-sm text-slate-500 text-center py-4">加载中...</div>
+            <div className="text-sm text-aura-text-muted text-center py-4">加载中...</div>
           ) : configs.length > 0 ? (
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-300">
+              <h3 className="text-sm font-semibold text-aura-text">
                 已有配置 ({configs.length})
               </h3>
               {configs.map((cfg) => (
                 <div
                   key={cfg.id}
-                  className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border border-slate-700"
+                  className="flex items-center justify-between p-3 bg-aura-hover rounded-lg border border-aura-border"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-slate-200 truncate">
+                      <span className="text-sm font-medium text-aura-text truncate">
                         {cfg.label}
                       </span>
                       {cfg.isDefault && (
@@ -333,10 +333,10 @@ export function ModelConfigPanel({
                         </span>
                       )}
                     </div>
-                    <span className="text-xs text-slate-500 block mt-0.5">
+                    <span className="text-xs text-aura-text-muted block mt-0.5">
                       {cfg.modelName}
                       {cfg.baseUrl && (
-                        <span className="ml-2 text-slate-600">{cfg.baseUrl}</span>
+                        <span className="ml-2 text-aura-text-dim">{cfg.baseUrl}</span>
                       )}
                     </span>
                   </div>
@@ -344,15 +344,14 @@ export function ModelConfigPanel({
                     <button
                       onClick={() => {
                         handleEdit(cfg);
-                        // 如果在列表页点击编辑，关闭"新增"模式
                       }}
-                      className="text-xs text-slate-400 hover:text-emerald-400 px-2 py-1 rounded hover:bg-slate-700 transition-colors"
+                      className="text-xs text-aura-text-secondary hover:text-emerald-400 px-2 py-1 rounded hover:bg-aura-border transition-colors"
                     >
                       编辑
                     </button>
                     <button
                       onClick={() => handleDelete(cfg.id)}
-                      className="text-xs text-slate-400 hover:text-red-400 px-2 py-1 rounded hover:bg-slate-700 transition-colors"
+                      className="text-xs text-aura-text-secondary hover:text-red-400 px-2 py-1 rounded hover:bg-aura-border transition-colors"
                     >
                       删除
                     </button>
@@ -362,7 +361,7 @@ export function ModelConfigPanel({
               {!editingId && (
                 <button
                   onClick={() => setEditingId("__new__")}
-                  className="w-full py-2 border border-dashed border-slate-700 rounded-lg text-xs text-slate-500 hover:text-emerald-400 hover:border-emerald-600 transition-colors"
+                  className="w-full py-2 border border-dashed border-aura-border rounded-lg text-xs text-aura-text-muted hover:text-emerald-400 hover:border-emerald-600 transition-colors"
                 >
                   + 新增
                 </button>

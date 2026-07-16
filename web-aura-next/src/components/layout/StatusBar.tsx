@@ -25,7 +25,7 @@ export function StatusBar() {
   }, []);
 
   return (
-    <footer className="flex items-center justify-between px-4 bg-slate-950 border-t border-slate-800 text-xs text-slate-500 select-none">
+    <footer className="flex items-center justify-between px-4 bg-aura-bg border-t border-aura-border-light text-xs text-aura-text-muted select-none">
       <div className="flex items-center gap-2">
         <span
           className={`inline-block w-2 h-2 rounded-full ${

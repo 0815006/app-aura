@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, type ReactNode } from "reac
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 import { StatusBar } from "./StatusBar";
+import { ThemeProvider } from "../theme/ThemeProvider";
 
 interface LayoutContextType {
   collapsed: boolean;
@@ -23,8 +24,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const toggleCollapsed = () => setCollapsed((prev) => !prev);
 
   return (
-    <LayoutContext.Provider value={{ collapsed, toggleCollapsed }}>
-      <div
+    <ThemeProvider>
+      <LayoutContext.Provider value={{ collapsed, toggleCollapsed }}>
+        <div
         className={`layout-wrapper${collapsed ? " collapsed" : ""}`}
         style={{
           display: "grid",
@@ -67,6 +69,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <StatusBar />
         </div>
       </div>
-    </LayoutContext.Provider>
+      </LayoutContext.Provider>
+    </ThemeProvider>
   );
 }

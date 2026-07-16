@@ -1,14 +1,56 @@
 @import "tailwindcss";
 
-/* ===== Aura CSS 变量 ===== */
-:root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+/* ============================================================
+   Aura 主题色彩系统
+   通过 data-theme 属性切换 — 所有组件使用语义化的
+   aura-* 色值，无需 dark: 前缀
+   ============================================================ */
+
+/* ---- 深色主题（默认） ---- */
+:root,
+[data-theme="dark"] {
+  --aura-bg: #020617;             /* slate-950 → 最深底色 */
+  --aura-surface: #0f172a;        /* slate-900 → 面板/卡片背景 */
+  --aura-hover: #1e293b;          /* slate-800 → 悬浮/抬高态 */
+  --aura-border: #334155;         /* slate-700 → 主分割线 */
+  --aura-border-light: #1e293b;   /* slate-800 → 次级分割线 */
+  --aura-text: #f1f5f9;           /* slate-100 → 主文字 */
+  --aura-text-secondary: #94a3b8; /* slate-400 → 次要文字 */
+  --aura-text-muted: #64748b;     /* slate-500 → 弱化文字 */
+  --aura-text-dim: #475569;       /* slate-600 → 极弱文字 */
+  --aura-overlay: rgba(0,0,0,0.6);/* 弹窗遮罩 */
+  --aura-scrollbar-thumb: #334155;
+  --aura-scrollbar-thumb-hover: #475569;
 }
 
+/* ---- 浅色主题 ---- */
+[data-theme="light"] {
+  --aura-bg: #ffffff;             /* white */
+  --aura-surface: #f8fafc;        /* slate-50 */
+  --aura-hover: #f1f5f9;          /* slate-100 */
+  --aura-border: #e2e8f0;         /* slate-200 */
+  --aura-border-light: #cbd5e1;   /* slate-300 */
+  --aura-text: #0f172a;           /* slate-900 */
+  --aura-text-secondary: #475569; /* slate-600 */
+  --aura-text-muted: #64748b;     /* slate-500 */
+  --aura-text-dim: #94a3b8;       /* slate-400 */
+  --aura-overlay: rgba(0,0,0,0.35);
+  --aura-scrollbar-thumb: #cbd5e1;
+  --aura-scrollbar-thumb-hover: #94a3b8;
+}
+
+/* ---- 注册为 Tailwind v4 色彩工具类 ---- */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-aura-bg: var(--aura-bg);
+  --color-aura-surface: var(--aura-surface);
+  --color-aura-hover: var(--aura-hover);
+  --color-aura-border: var(--aura-border);
+  --color-aura-border-light: var(--aura-border-light);
+  --color-aura-text: var(--aura-text);
+  --color-aura-text-secondary: var(--aura-text-secondary);
+  --color-aura-text-muted: var(--aura-text-muted);
+  --color-aura-text-dim: var(--aura-text-dim);
+
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas",
@@ -17,8 +59,8 @@
 
 /* ===== 全局重置 ===== */
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--aura-bg);
+  color: var(--aura-text);
   font-family: var(--font-sans);
   margin: 0;
   padding: 0;
@@ -34,17 +76,17 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: var(--aura-scrollbar-thumb);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: var(--aura-scrollbar-thumb-hover);
 }
 
 /* ===== 文本选中色 ===== */
 ::selection {
   background: rgba(16, 185, 129, 0.3);
-  color: #fff;
+  color: var(--aura-text);
 }
 
 /* ===== 文件新增高亮闪烁动效 ===== */

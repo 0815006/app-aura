@@ -71,21 +71,21 @@ export function ModelSwitcher({ selectedConfigId, onSelect }: ModelSwitcherProps
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 bg-aura-hover hover:bg-aura-border border border-aura-border rounded-lg text-xs text-aura-text transition-colors"
         title="切换模型"
       >
-        <span className="text-slate-500">🤖</span>
+        <span className="text-aura-text-muted">🤖</span>
         {loading ? (
-          <span className="text-slate-500">加载中...</span>
+          <span className="text-aura-text-muted">加载中...</span>
         ) : selected ? (
           <>
             <span className="text-emerald-400 font-medium">
               {selected.label}
             </span>
-            <span className="text-slate-500">({selected.modelName})</span>
+            <span className="text-aura-text-muted">({selected.modelName})</span>
           </>
         ) : (
-          <span className="text-slate-500">环境变量默认模型</span>
+          <span className="text-aura-text-muted">环境变量默认模型</span>
         )}
         <svg
           className={`w-3 h-3 ml-1 transition-transform ${open ? "rotate-180" : ""}`}
@@ -110,7 +110,7 @@ export function ModelSwitcher({ selectedConfigId, onSelect }: ModelSwitcherProps
             className="fixed inset-0 z-10"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute top-full left-0 mt-1 z-20 w-72 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden">
+          <div className="absolute top-full left-0 mt-1 z-20 w-72 bg-aura-hover border border-aura-border rounded-lg shadow-xl overflow-hidden">
             <div className="max-h-64 overflow-y-auto py-1">
               {/* 无模型配置选项 */}
               <button
@@ -121,18 +121,18 @@ export function ModelSwitcher({ selectedConfigId, onSelect }: ModelSwitcherProps
                 className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
                   !selectedConfigId
                     ? "bg-emerald-600/20 text-emerald-400"
-                    : "text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                    : "text-aura-text-secondary hover:bg-aura-border hover:text-aura-text"
                 }`}
               >
-                <span className="text-slate-500">默认</span>
-                <span className="text-xs text-slate-500 ml-2">
+                <span className="text-aura-text-muted">默认</span>
+                <span className="text-xs text-aura-text-muted ml-2">
                   使用环境变量模型
                 </span>
               </button>
 
               {/* 分隔线 */}
               {configs.length > 0 && (
-                <div className="border-t border-slate-700 my-1" />
+                <div className="border-t border-aura-border my-1" />
               )}
 
               {/* 用户配置列表 */}
@@ -146,7 +146,7 @@ export function ModelSwitcher({ selectedConfigId, onSelect }: ModelSwitcherProps
                   className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
                     selectedConfigId === cfg.id
                       ? "bg-emerald-600/20 text-emerald-400"
-                      : "text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                      : "text-aura-text-secondary hover:bg-aura-border hover:text-aura-text"
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -157,7 +157,7 @@ export function ModelSwitcher({ selectedConfigId, onSelect }: ModelSwitcherProps
                       </span>
                     )}
                   </div>
-                  <span className="text-xs text-slate-500">{cfg.modelName}</span>
+                  <span className="text-xs text-aura-text-muted">{cfg.modelName}</span>
                 </button>
               ))}
             </div>

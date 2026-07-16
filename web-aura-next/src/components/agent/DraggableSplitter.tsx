@@ -22,12 +22,19 @@ export function DraggableSplitter({
       e.preventDefault();
       setDragging(true);
 
-      const startX = e.clientX;
-      const startY = e.clientY;
+      // 使用增量 delta（相对上一次位置），而非绝对偏移
+      // 这样父组件用 functional updater (prev => prev + delta) 才不会漂移
+      let lastX = e.clientX;
+      let lastY = e.clientY;
 
       const handleMouseMove = (ev: MouseEvent) => {
-        const delta = axis === "x" ? ev.clientX - startX : ev.clientY - startY;
-        onDrag(delta);
+        const delta =
+          axis === "x" ? ev.clientX - lastX : ev.clientY - lastY;
+        lastX = ev.clientX;
+        lastY = ev.clientY;
+        if (delta !== 0) {
+          onDrag(delta);
+        }
       };
 
       const handleMouseUp = () => {
@@ -52,7 +59,7 @@ export function DraggableSplitter({
         axis === "x"
           ? "w-1 cursor-col-resize hover:bg-emerald-500/50"
           : "h-1 cursor-row-resize hover:bg-emerald-500/50"
-      } ${dragging ? "bg-emerald-500/70" : "bg-slate-700/30"} transition-colors z-10`}
+      } ${dragging ? "bg-emerald-500/70" : "bg-aura-border/30"} transition-colors z-10`}
       onMouseDown={handleMouseDown}
     />
   );

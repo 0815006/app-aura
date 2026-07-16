@@ -43,20 +43,20 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950">
+    <div className="min-h-screen flex items-center justify-center bg-aura-bg">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
           <span className="text-5xl">🧠</span>
           <h1 className="text-3xl font-bold text-emerald-400 mt-3">Aura</h1>
-          <p className="text-slate-500 text-sm mt-2">
+          <p className="text-aura-text-muted text-sm mt-2">
             多场景通用智能体工作台
           </p>
         </div>
 
         {/* 表单 */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-8">
-          <h2 className="text-lg font-semibold text-slate-100 mb-6">
+        <div className="bg-aura-surface border border-aura-border rounded-xl p-8">
+          <h2 className="text-lg font-semibold text-aura-text mb-6">
             {isRegister ? "创建账号" : "登录"}
           </h2>
 
@@ -68,7 +68,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm text-slate-400 mb-1.5">
+              <label className="block text-sm text-aura-text-secondary mb-1.5">
                 用户名
               </label>
               <input
@@ -77,13 +77,13 @@ export default function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="请输入用户名"
                 required
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+                className="w-full bg-aura-hover border border-aura-border rounded-lg px-4 py-2.5 text-sm text-aura-text placeholder-aura-text-muted focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
               />
             </div>
 
             {isRegister && (
               <div>
-                <label className="block text-sm text-slate-400 mb-1.5">
+                <label className="block text-sm text-aura-text-secondary mb-1.5">
                   显示名称（可选）
                 </label>
                 <input
@@ -91,13 +91,13 @@ export default function LoginPage() {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="给自己起个名字"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  className="w-full bg-aura-hover border border-aura-border rounded-lg px-4 py-2.5 text-sm text-aura-text placeholder-aura-text-muted focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-sm text-slate-400 mb-1.5">
+              <label className="block text-sm text-aura-text-secondary mb-1.5">
                 密码
               </label>
               <input
@@ -107,14 +107,14 @@ export default function LoginPage() {
                 placeholder={isRegister ? "至少 6 位密码" : "请输入密码"}
                 required
                 minLength={isRegister ? 6 : undefined}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+                className="w-full bg-aura-hover border border-aura-border rounded-lg px-4 py-2.5 text-sm text-aura-text placeholder-aura-text-muted focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white py-2.5 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed mt-6"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-aura-hover disabled:text-aura-text-muted text-white py-2.5 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed mt-6"
             >
               {loading ? "处理中..." : isRegister ? "注册" : "登录"}
             </button>
@@ -127,14 +127,14 @@ export default function LoginPage() {
                 setIsRegister(!isRegister);
                 setError("");
               }}
-              className="text-sm text-slate-500 hover:text-emerald-400 transition-colors"
+              className="text-sm text-aura-text-muted hover:text-emerald-400 transition-colors"
             >
               {isRegister ? "已有账号？去登录" : "没有账号？注册一个"}
             </button>
           </div>
         </div>
 
-        <p className="text-center text-xs text-slate-600 mt-6">
+        <p className="text-center text-xs text-aura-text-dim mt-6">
           Aura v0.1.0 · 开放注册 · 极简账户系统
         </p>
       </div>

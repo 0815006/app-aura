@@ -53,6 +53,9 @@ export function WorkspaceTree({
     Record<string, FileEntry[]>
   >({});
 
+  // 当前工作空间名称
+  const [workspaceName, setWorkspaceName] = useState("");
+
   // 工作空间管理弹窗
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
@@ -99,6 +102,35 @@ export function WorkspaceTree({
   useEffect(() => {
     loadRoot();
   }, [loadRoot, refreshToken]);
+
+  // ============================================================
+  // 加载当前工作空间名称
+  // ============================================================
+  useEffect(() => {
+    if (!workspaceId) {
+      setWorkspaceName("");
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await api.get<WorkspaceInfo>(
+          `/api/workspaces?id=${workspaceId}`
+        );
+        if (!cancelled && res.code === 200 && res.data) {
+          setWorkspaceName(res.data.name);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId]);
 
   // ============================================================
   // 加载子目录
@@ -217,7 +249,7 @@ export function WorkspaceTree({
     return (
       <React.Fragment key={entry.path}>
         <div
-          className="flex items-center gap-1 py-0.5 px-1 rounded cursor-pointer hover:bg-slate-800 text-xs group transition-colors"
+          className="flex items-center gap-1 py-0.5 px-1 rounded cursor-pointer hover:bg-aura-hover text-xs group transition-colors"
           style={{ paddingLeft: 8 + depth * 16 }}
           onClick={() => {
             if (entry.isDirectory) {
@@ -230,7 +262,7 @@ export function WorkspaceTree({
         >
           {/* 展开/折叠箭头 */}
           {entry.isDirectory && (
-            <span className="w-3 text-slate-500 flex-shrink-0 text-center">
+            <span className="w-3 text-aura-text-muted flex-shrink-0 text-center">
               {isExpanded ? "▼" : "▶"}
             </span>
           )}
@@ -245,8 +277,8 @@ export function WorkspaceTree({
           <span
             className={`truncate ${
               entry.isDirectory
-                ? "text-slate-300 font-medium"
-                : "text-slate-400"
+                ? "text-aura-text font-medium"
+                : "text-aura-text-secondary"
             }`}
             title={entry.name}
           >
@@ -255,7 +287,7 @@ export function WorkspaceTree({
 
           {/* 文件大小 */}
           {entry.isFile && entry.size !== undefined && (
-            <span className="text-slate-600 text-[10px] ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="text-aura-text-dim text-[10px] ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
               {formatSize(entry.size)}
             </span>
           )}
@@ -266,7 +298,7 @@ export function WorkspaceTree({
           <div>
             {children.length === 0 && (
               <div
-                className="text-slate-600 text-xs py-0.5"
+                className="text-aura-text-dim text-xs py-0.5"
                 style={{ paddingLeft: 8 + (depth + 1) * 16 }}
               >
                 (空目录)
@@ -284,11 +316,22 @@ export function WorkspaceTree({
   // ============================================================
 
   return (
-    <div className="h-full flex flex-col bg-slate-950">
+    <div className="h-full flex flex-col bg-aura-bg">
       {/* 标题 */}
-      <div className="px-3 py-2 border-b border-slate-800">
-        <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-          📁 工作空间
+      <div className="px-3 py-2 border-b border-aura-border">
+        <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 min-w-0">
+          <span className="flex-shrink-0">📁</span>
+          {workspaceId && workspaceName ? (
+            <span className="truncate" title={workspaceName}>
+              {workspaceName}
+            </span>
+          ) : workspaceId ? (
+            <span className="truncate text-aura-text-muted normal-case">
+              {workspaceId.slice(0, 8)}...
+            </span>
+          ) : (
+            <span>工作空间</span>
+          )}
         </h2>
       </div>
 
@@ -296,10 +339,10 @@ export function WorkspaceTree({
       <div className="flex-1 overflow-y-auto py-1">
         {!workspaceId && (
           <div className="text-center py-8 px-3">
-            <p className="text-slate-500 text-xs">
+            <p className="text-aura-text-muted text-xs">
               暂无工作空间
             </p>
-            <p className="text-slate-600 text-[10px] mt-1">
+            <p className="text-aura-text-dim text-[10px] mt-1">
               点击下方按钮新建或载入
             </p>
           </div>
@@ -307,7 +350,7 @@ export function WorkspaceTree({
 
         {workspaceId && loading && (
           <div className="text-center py-4">
-            <span className="text-slate-500 text-xs animate-pulse">
+            <span className="text-aura-text-muted text-xs animate-pulse">
               加载中...
             </span>
           </div>
@@ -330,10 +373,10 @@ export function WorkspaceTree({
           !error &&
           entries.length === 0 && (
             <div className="text-center py-4 px-3">
-              <p className="text-slate-500 text-xs">
+              <p className="text-aura-text-muted text-xs">
                 目录为空
               </p>
-              <p className="text-slate-600 text-[10px] mt-1">
+              <p className="text-aura-text-dim text-[10px] mt-1">
                 让 AI Agent 帮你创建文件吧
               </p>
             </div>
@@ -343,11 +386,11 @@ export function WorkspaceTree({
       </div>
 
       {/* 底部操作按钮 */}
-      <div className="border-t border-slate-800 p-2 space-y-1">
+      <div className="border-t border-aura-border p-2 space-y-1">
         {workspaceId ? (
           <button
             onClick={handleExitWorkspace}
-            className="w-full text-xs text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded px-2 py-1.5 text-left transition-colors"
+            className="w-full text-xs text-aura-text-secondary hover:text-red-400 hover:bg-aura-hover rounded px-2 py-1.5 text-left transition-colors"
           >
             ↩ 退出工作空间
           </button>
@@ -355,13 +398,13 @@ export function WorkspaceTree({
           <>
             <button
               onClick={handleLoadClick}
-              className="w-full text-xs text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded px-2 py-1.5 text-left transition-colors"
+              className="w-full text-xs text-aura-text-secondary hover:text-emerald-400 hover:bg-aura-hover rounded px-2 py-1.5 text-left transition-colors"
             >
               📂 载入工作空间
             </button>
             <button
               onClick={() => setShowCreateDialog(true)}
-              className="w-full text-xs text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded px-2 py-1.5 text-left transition-colors"
+              className="w-full text-xs text-aura-text-secondary hover:text-emerald-400 hover:bg-aura-hover rounded px-2 py-1.5 text-left transition-colors"
             >
               ✨ 新建工作空间
             </button>
@@ -374,7 +417,7 @@ export function WorkspaceTree({
       {/* ================================================ */}
       {showCreateDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-96 shadow-2xl">
+          <div className="bg-aura-surface border border-aura-border rounded-xl p-6 w-96 shadow-2xl">
             <h3 className="text-lg font-bold text-emerald-400 mb-4">
               ✨ 新建工作空间
             </h3>
@@ -382,7 +425,7 @@ export function WorkspaceTree({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="输入工作空间名称..."
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 mb-4"
+              className="w-full bg-aura-hover border border-aura-border rounded-lg px-4 py-2.5 text-sm text-aura-text placeholder-aura-text-muted focus:outline-none focus:border-emerald-500 mb-4"
               onKeyDown={(e) => e.key === "Enter" && handleCreateWorkspace()}
               autoFocus
             />
@@ -392,14 +435,14 @@ export function WorkspaceTree({
                   setShowCreateDialog(false);
                   setNewName("");
                 }}
-                className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+                className="px-4 py-2 text-sm text-aura-text-secondary hover:text-aura-text transition-colors"
               >
                 取消
               </button>
               <button
                 onClick={handleCreateWorkspace}
                 disabled={!newName.trim()}
-                className="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors"
+                className="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-aura-hover disabled:text-aura-text-muted text-white rounded-lg transition-colors"
               >
                 创建
               </button>
@@ -413,19 +456,19 @@ export function WorkspaceTree({
       {/* ================================================ */}
       {showLoadDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-96 shadow-2xl max-h-[70vh] flex flex-col">
+          <div className="bg-aura-surface border border-aura-border rounded-xl p-6 w-96 shadow-2xl max-h-[70vh] flex flex-col">
             <h3 className="text-lg font-bold text-emerald-400 mb-4">
               📂 载入工作空间
             </h3>
 
             <div className="flex-1 overflow-y-auto space-y-1">
               {listLoading && (
-                <p className="text-slate-500 text-sm text-center py-4">
+                <p className="text-aura-text-muted text-sm text-center py-4">
                   加载中...
                 </p>
               )}
               {!listLoading && workspaceList.length === 0 && (
-                <p className="text-slate-500 text-sm text-center py-4">
+                <p className="text-aura-text-muted text-sm text-center py-4">
                   暂无可用工作空间
                 </p>
               )}
@@ -434,10 +477,10 @@ export function WorkspaceTree({
                   <button
                     key={ws.id}
                     onClick={() => handleSelectWorkspace(ws.id)}
-                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors"
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-aura-hover transition-colors"
                   >
-                    <p className="text-sm text-slate-200">{ws.name}</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">
+                    <p className="text-sm text-aura-text">{ws.name}</p>
+                    <p className="text-[10px] text-aura-text-muted mt-0.5">
                       {ws.id} ·{" "}
                       {new Date(ws.updateTime).toLocaleString("zh-CN")}
                     </p>
@@ -445,10 +488,10 @@ export function WorkspaceTree({
                 ))}
             </div>
 
-            <div className="flex gap-2 justify-end mt-4 pt-4 border-t border-slate-800">
+            <div className="flex gap-2 justify-end mt-4 pt-4 border-t border-aura-border">
               <button
                 onClick={() => setShowLoadDialog(false)}
-                className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+                className="px-4 py-2 text-sm text-aura-text-secondary hover:text-aura-text transition-colors"
               >
                 取消
               </button>
@@ -471,25 +514,25 @@ export function WorkspaceTree({
             }}
           />
           <div
-            className="fixed z-50 bg-slate-800 border border-slate-700 rounded-lg py-1 shadow-xl min-w-[160px]"
+            className="fixed z-50 bg-aura-hover border border-aura-border rounded-lg py-1 shadow-xl min-w-[160px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
-            <p className="px-3 py-1 text-[10px] text-slate-500 uppercase">
+            <p className="px-3 py-1 text-[10px] text-aura-text-muted uppercase">
               {contextMenu.entry.name}
             </p>
-            <div className="border-t border-slate-700 mt-1" />
+            <div className="border-t border-aura-border mt-1" />
             <button
               onClick={() => {
                 onFileSelect(contextMenu.entry.path);
                 closeContextMenu();
               }}
-              className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors"
+              className="w-full text-left px-3 py-1.5 text-xs text-aura-text hover:bg-aura-border transition-colors"
             >
               📄 打开文件
             </button>
             <button
               onClick={closeContextMenu}
-              className="w-full text-left px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-700 transition-colors"
+              className="w-full text-left px-3 py-1.5 text-xs text-aura-text-muted hover:bg-aura-border transition-colors"
             >
               📋 复制路径
             </button>
