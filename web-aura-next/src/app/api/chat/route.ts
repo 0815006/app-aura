@@ -1,5 +1,5 @@
 import { createDeepSeek } from "@ai-sdk/deepseek";
-import { streamText } from "ai";
+import { streamText, stepCountIs } from "ai";
 
 import { db } from "@/lib/db/client";
 import {
@@ -325,8 +325,9 @@ export async function POST(req: Request) {
       // ★ 自动选择：模型自主决定何时调用工具、何时输出文字
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       toolChoice: "auto" as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      maxSteps: maxSteps as any,
+      // ★ AI SDK v7: 用 stopWhen 控制多步工具调用（maxSteps 在 v7 中不存在！）
+      // 默认是 stepCountIs(1)，必须显式设置才能执行多步
+      stopWhen: stepCountIs(maxSteps),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       experimental_repairToolCall: async (options: any) => {
         try {

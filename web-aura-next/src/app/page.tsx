@@ -143,9 +143,8 @@ export default function AgentWorkbench() {
   const chatIdRef = useRef(chatId);
   chatIdRef.current = chatId;
 
-  // ★ 自动滚动 & 实时步骤追踪
+  // ★ 自动滚动
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [liveSteps, setLiveSteps] = useState<TimelineStep[]>([]);
 
   // ★ Run 详情 & 用量追踪
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -189,6 +188,8 @@ export default function AgentWorkbench() {
       fetchRecentSessions();
       // ★ 异步拉取最新 Run 的 token 用量
       fetchLatestRunTokens();
+      // ★ AI 执行完成，刷新工作空间树（可能有新文件/目录生成）
+      setRefreshToken((prev) => prev + 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
@@ -199,43 +200,6 @@ export default function AgentWorkbench() {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
-
-  // ★ 实时提取当前正在执行的步骤（从最后一条 assistant 消息的 parts）
-  useEffect(() => {
-    if (!isLoading || messages.length === 0) {
-      if (!isLoading) setLiveSteps([]);
-      return;
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const lastMsg = messages[messages.length - 1] as Record<string, any>;
-    if (lastMsg?.role !== "assistant") return;
-    const parts = lastMsg.parts;
-    if (!Array.isArray(parts)) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const steps: TimelineStep[] = [];
-    parts.forEach((part: Record<string, any>, i: number) => {
-      if (part.type === "tool-invocation") {
-        const ti = part.toolInvocation;
-        steps.push({
-          index: i,
-          type: "tool-call",
-          toolName: ti?.toolName ?? "unknown",
-          toolArgs: ti?.args,
-          toolResult: ti?.result,
-          state: ti?.state ?? "call",
-        });
-      }
-      if (part.type === "reasoning") {
-        steps.push({
-          index: i,
-          type: "thought",
-          text: part.text,
-          state: "done",
-        });
-      }
-    });
-    setLiveSteps(steps);
-  }, [messages, isLoading]);
 
   // ★ 从最新 Run 刷新 token 用量
   const fetchLatestRunTokens = useCallback(async () => {
@@ -431,7 +395,6 @@ export default function AgentWorkbench() {
     chatIdRef.current = null;
     setSessionTitle("");
     setMessages([]);
-    setLiveSteps([]);
     setSessionTokens({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
     setSelectedRunId(null);
   }, [setMessages]);
@@ -886,9 +849,12 @@ export default function AgentWorkbench() {
               </div>
             )}
 
-            {messages.map((m) => {
+            {messages.map((m, msgIndex) => {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const msg = m as Record<string, any>;
+              const isLastMessage = msgIndex === messages.length - 1;
+              const isStreamingMessage = isLastMessage && isLoading;
+
               const textContent =
                 typeof msg.content === "string"
                   ? msg.content
@@ -948,34 +914,31 @@ export default function AgentWorkbench() {
                             }
                           }
                         );
-                        return <StepTimeline steps={steps} />;
+                        if (steps.length === 0) return null;
+                        return (
+                          <StepTimeline
+                            steps={steps}
+                            isStreaming={isStreamingMessage}
+                          />
+                        );
                       })()}
+
+                      {/* ★ 流式加载指示器（只在最后一条 assistant 消息流式传输时显示） */}
+                      {isStreamingMessage && msg.role === "assistant" && (
+                        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-aura-border">
+                          <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-bounce" />
+                          <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:100ms]" />
+                          <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:200ms]" />
+                          <span className="text-xs text-aura-text-muted ml-1">
+                            智能体执行中...
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               );
             })}
-
-            {isLoading && messages.length > 0 && (
-              <div className="flex justify-start">
-                <div className="bg-aura-hover rounded-xl p-3.5 max-w-[85%]">
-                  {/* ★ 实时步骤时间线 */}
-                  {liveSteps.length > 0 && (
-                    <div className="mb-3">
-                      <StepTimeline steps={liveSteps} isStreaming={true} />
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-bounce" />
-                    <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:100ms]" />
-                    <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:200ms]" />
-                    <span className="text-xs text-aura-text-muted ml-1">
-                      智能体执行中...
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* ★ 自动滚动锚点 */}
             <div ref={messagesEndRef} />

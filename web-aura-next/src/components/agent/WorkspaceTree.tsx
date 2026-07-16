@@ -312,6 +312,17 @@ export function WorkspaceTree({
   };
 
   // ============================================================
+  // 手动刷新
+  // ============================================================
+
+  const handleRefresh = useCallback(() => {
+    // 清除子目录缓存，确保展开的目录也会刷新
+    setDirChildren({});
+    setExpandedDirs(new Set());
+    loadRoot();
+  }, [loadRoot]);
+
+  // ============================================================
   // 主渲染
   // ============================================================
 
@@ -319,20 +330,33 @@ export function WorkspaceTree({
     <div className="h-full flex flex-col bg-aura-bg">
       {/* 标题 */}
       <div className="px-3 py-2 border-b border-aura-border">
-        <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 min-w-0">
-          <span className="flex-shrink-0">📁</span>
-          {workspaceId && workspaceName ? (
-            <span className="truncate" title={workspaceName}>
-              {workspaceName}
-            </span>
-          ) : workspaceId ? (
-            <span className="truncate text-aura-text-muted normal-case">
-              {workspaceId.slice(0, 8)}...
-            </span>
-          ) : (
-            <span>工作空间</span>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 min-w-0 flex-1">
+            <span className="flex-shrink-0">📁</span>
+            {workspaceId && workspaceName ? (
+              <span className="truncate" title={workspaceName}>
+                {workspaceName}
+              </span>
+            ) : workspaceId ? (
+              <span className="truncate text-aura-text-muted normal-case">
+                {workspaceId.slice(0, 8)}...
+              </span>
+            ) : (
+              <span>工作空间</span>
+            )}
+          </h2>
+          {workspaceId && (
+            <button
+              onClick={handleRefresh}
+              className="flex-shrink-0 text-aura-text-muted hover:text-emerald-400 p-1 rounded hover:bg-aura-hover transition-colors"
+              title="刷新工作空间"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
           )}
-        </h2>
+        </div>
       </div>
 
       {/* 文件树 */}
