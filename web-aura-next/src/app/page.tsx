@@ -422,7 +422,7 @@ export default function AgentWorkbench() {
             {messages.length === 0 && (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
-                  <p className="text-5xl mb-4">🧠</p>
+                  <img src="/aura.svg" alt="Aura" className="w-20 h-20 mx-auto mb-4" />
                   <p className="text-lg font-bold text-emerald-400">
                     欢迎使用 Aura 智能体工作台
                   </p>

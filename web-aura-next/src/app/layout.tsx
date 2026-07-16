@@ -6,6 +6,11 @@ import { AuthProvider } from "@/lib/auth/auth-context";
 export const metadata: Metadata = {
   title: "Aura - 多场景通用智能体工作台",
   description: "基于 Next.js + Vercel AI SDK + DeepSeek 的全栈智能体平台",
+  icons: {
+    icon: "/aura.svg",
+    shortcut: "/aura.svg",
+    apple: "/aura.svg",
+  },
 };
 
 export default function RootLayout({

@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!--
+    Aura Logo — 「光晕与多维形态」
+    设计概念：字母 "A" 几何抽象化，顶端镂空替换为极光渐变圆环
+    品牌色：深空蓝底 #0B1026 / 主体 翠绿→冰蓝渐变
+  -->
+  <defs>
+    <!-- 极光渐变：翠绿 (#34D399) → 青碧 (#2DD4BF) → 冰蓝 (#38BDF8) -->
+    <linearGradient id="auraGrad" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="45%" stop-color="#2DD4BF"/>
+      <stop offset="100%" stop-color="#38BDF8"/>
+    </linearGradient>
+
+    <!-- 光晕环内部径向渐变 (中心透明 → 边缘发光) -->
+    <radialGradient id="ringGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="70%" stop-color="#34D399" stop-opacity="0"/>
+      <stop offset="85%" stop-color="#2DD4BF" stop-opacity="0.35"/>
+      <stop offset="93%" stop-color="#38BDF8" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#38BDF8" stop-opacity="1"/>
+    </radialGradient>
+
+    <!-- 环外柔光扩散 -->
+    <radialGradient id="outerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 背景：深空蓝圆角方形 -->
+  <rect width="200" height="200" rx="36" fill="#0B1026"/>
+
+  <!-- 环外柔光 -->
+  <circle cx="100" cy="52" r="68" fill="url(#outerGlow)"/>
+
+  <!-- ========== A 字母主体 (22px 几何粗线，极光渐变) ========== -->
+  <g stroke="url(#auraGrad)" stroke-width="22" stroke-linecap="butt" stroke-linejoin="miter">
+    <!-- 左腿：底 → 接近光环左缘 -->
+    <line x1="48" y1="175" x2="78" y2="62"/>
+    <!-- 右腿：底 → 接近光环右缘 -->
+    <line x1="152" y1="175" x2="122" y2="62"/>
+    <!-- 横杠 -->
+    <line x1="58" y1="115" x2="142" y2="115"/>
+  </g>
+
+  <!-- ========== 顶端光晕环 (Δ  极光能量场) ========== -->
+  <!-- 环填充 (径向渐变发光) -->
+  <circle cx="100" cy="52" r="30" fill="url(#ringGlow)"/>
+  <!-- 环外缘描边 -->
+  <circle cx="100" cy="52" r="30" stroke="url(#auraGrad)" stroke-width="3" fill="none" opacity="0.85"/>
+  <!-- 环内缘描边 -->
+  <circle cx="100" cy="52" r="24" stroke="url(#auraGrad)" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <!-- 环心微光 -->
+  <circle cx="100" cy="52" r="5" fill="#38BDF8" opacity="0.5"/>
+
+  <!-- ========== 装饰光点 ========== -->
+  <circle cx="118" cy="42" r="1.8" fill="#38BDF8" opacity="0.6"/>
+  <circle cx="84" cy="38" r="1.2" fill="#2DD4BF" opacity="0.5"/>
+  <circle cx="108" cy="70" r="1" fill="#34D399" opacity="0.4"/>
+</svg>
