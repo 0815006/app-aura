@@ -8,7 +8,7 @@ import { WorkspaceTree } from "@/components/agent/WorkspaceTree";
 import { DraggableSplitter } from "@/components/agent/DraggableSplitter";
 import { ModelSwitcher, type ModelConfigSafe } from "@/components/agent/ModelSwitcher";
 import { ModelConfigPanel } from "@/components/agent/ModelConfigPanel";
-import { StepAccordion, type StepInfo } from "@/components/agent/StepAccordion";
+import { StepTimeline, type TimelineStep } from "@/components/agent/StepTimeline";
 import { UsageBadge } from "@/components/agent/UsageBadge";
 import { RunDetailPanel } from "@/components/agent/RunDetailPanel";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -128,6 +128,7 @@ export default function AgentWorkbench() {
 
   // ★ 会话（Session）管理
   const [chatId, setChatId] = useState<string | null>(null); // 当前活跃会话 ID
+  const [sessionTitle, setSessionTitle] = useState<string>(""); // 当前会话标题
   const [recentSessions, setRecentSessions] = useState<ChatSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [allSessionsModalOpen, setAllSessionsModalOpen] = useState(false);
@@ -144,7 +145,7 @@ export default function AgentWorkbench() {
 
   // ★ 自动滚动 & 实时步骤追踪
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [liveSteps, setLiveSteps] = useState<StepInfo[]>([]);
+  const [liveSteps, setLiveSteps] = useState<TimelineStep[]>([]);
 
   // ★ Run 详情 & 用量追踪
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -211,13 +212,13 @@ export default function AgentWorkbench() {
     const parts = lastMsg.parts;
     if (!Array.isArray(parts)) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const steps: StepInfo[] = [];
+    const steps: TimelineStep[] = [];
     parts.forEach((part: Record<string, any>, i: number) => {
       if (part.type === "tool-invocation") {
         const ti = part.toolInvocation;
         steps.push({
           index: i,
-          type: "tool-invocation",
+          type: "tool-call",
           toolName: ti?.toolName ?? "unknown",
           toolArgs: ti?.args,
           toolResult: ti?.result,
@@ -225,7 +226,12 @@ export default function AgentWorkbench() {
         });
       }
       if (part.type === "reasoning") {
-        steps.push({ index: i, type: "reasoning", text: part.text });
+        steps.push({
+          index: i,
+          type: "thought",
+          text: part.text,
+          state: "done",
+        });
       }
     });
     setLiveSteps(steps);
@@ -285,6 +291,7 @@ export default function AgentWorkbench() {
     setFileContent("");
     setChatId(null);
     chatIdRef.current = null;
+    setSessionTitle("");
     setMessages([]);
     setRecentSessions([]);
     setSelectedRunId(null);
@@ -339,10 +346,11 @@ export default function AgentWorkbench() {
 
   /** 点击会话卡片：加载历史消息并恢复为活跃会话，可继续聊天 */
   const handleSessionClick = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, title?: string) => {
       if (!workspaceId) return;
       setChatId(sessionId);
       chatIdRef.current = sessionId;
+      if (title) setSessionTitle(title);
       try {
         const res = await fetch(
           `/api/workspaces/chat-messages?workspaceId=${workspaceId}&sessionId=${sessionId}`
@@ -357,8 +365,8 @@ export default function AgentWorkbench() {
               { type: "text" as const, text: m.content ?? "" },
             ];
 
-            // ★ 将 DB 中的 toolCalls JSON 转换为 tool-invocation parts
-            // 这样 StepAccordion 可以正确展示历史工具调用
+            // ★ 将 DB 中的 toolCalls JSON 转换为 UI parts
+            // StepTimeline 通过这些 parts 渲染历史工具调用步骤
             if (m.toolCalls && Array.isArray(m.toolCalls)) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               for (const tc of m.toolCalls as any[]) {
@@ -421,6 +429,7 @@ export default function AgentWorkbench() {
   const handleNewChat = useCallback(() => {
     setChatId(null);
     chatIdRef.current = null;
+    setSessionTitle("");
     setMessages([]);
     setLiveSteps([]);
     setSessionTokens({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
@@ -491,6 +500,8 @@ export default function AgentWorkbench() {
     if (!chatIdRef.current) {
       chatIdRef.current = currentChatId;
       setChatId(currentChatId);
+      // 新会话：用第一条用户消息作为标题
+      setSessionTitle(chatInput.trim().slice(0, 60));
     }
 
     sendMessage({ text: chatInput });
@@ -690,26 +701,57 @@ export default function AgentWorkbench() {
               : `calc(${rightRatio * 100}% - 2px)`,
           }}
         >
-          {/* 聊天区头部 */}
-          <div className="flex items-center justify-between px-4 py-2 border-b border-aura-border bg-aura-bg">
-            <div className="flex items-center gap-3">
-              <img src="/aura.svg" alt="Aura" className="w-5 h-5 flex-shrink-0" />
-              <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                AI 控制台
-              </h2>
+          {/* ========== 会话标题栏（活跃会话时显示） ========== */}
+          {chatId && (
+            <div className="flex items-center justify-between px-4 py-2 border-b border-aura-border bg-aura-bg/80">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                {/* 会话图标 */}
+                <span className="text-sm flex-shrink-0">💬</span>
+                {/* 会话标题 */}
+                <h3
+                  className="text-sm font-semibold text-aura-text truncate"
+                  title={sessionTitle || "未命名会话"}
+                >
+                  {sessionTitle || "未命名会话"}
+                </h3>
+                {/* 会话 ID 小标签 */}
+                <span className="text-[10px] text-aura-text-dim flex-shrink-0 hidden sm:inline">
+                  #{chatId.slice(0, 8)}
+                </span>
+              </div>
 
-              {/* ★ 新对话按钮（有活跃会话时显示） */}
-              {chatId && (
+              <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                {/* 新对话按钮 */}
                 <button
                   onClick={handleNewChat}
                   className="text-[10px] text-aura-text-muted hover:text-emerald-400 bg-aura-surface border border-aura-border rounded px-2 py-0.5 transition-colors"
-                  title="开始新对话"
+                  title="新建对话"
                 >
-                  + 新对话
+                  + 新建
                 </button>
-              )}
+                {/* 关闭会话按钮 */}
+                <button
+                  onClick={handleNewChat}
+                  className="text-aura-text-muted hover:text-red-400 p-1.5 rounded hover:bg-aura-hover transition-colors"
+                  title="关闭当前会话"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
 
-              {/* ★ Phase 6: 模型选择器 */}
+          {/* ========== 控制栏（始终显示） ========== */}
+          <div className="flex items-center justify-between px-4 py-1.5 border-b border-aura-border bg-aura-bg">
+            <div className="flex items-center gap-3">
+              <img src="/aura.svg" alt="Aura" className="w-4 h-4 flex-shrink-0" />
+              <h2 className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                AI 控制台
+              </h2>
+
+              {/* ★ 模型选择器 */}
               <ModelSwitcher
                 key={modelSwitchKey}
                 selectedConfigId={selectedModelConfig?.id ?? null}
@@ -722,7 +764,7 @@ export default function AgentWorkbench() {
                 className="text-aura-text-muted hover:text-emerald-400 p-1 rounded transition-colors"
                 title="管理模型配置"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
@@ -797,7 +839,7 @@ export default function AgentWorkbench() {
                       recentSessions.map((s) => (
                         <button
                           key={s.sessionId}
-                          onClick={() => handleSessionClick(s.sessionId)}
+                          onClick={() => handleSessionClick(s.sessionId, s.title)}
                           className={`w-full text-left p-3 rounded-lg mb-2 transition-colors border ${
                             chatId === s.sessionId
                               ? "border-emerald-500/50 bg-emerald-500/10"
@@ -876,11 +918,11 @@ export default function AgentWorkbench() {
                     <div className="whitespace-pre-wrap text-sm leading-relaxed">
                       {textContent && <p>{textContent}</p>}
 
-                      {/* ★ StepAccordion: 步骤折叠器 */}
+                      {/* ★ StepTimeline: 步骤时间线 */}
                       {(() => {
                         if (!msg.parts) return null;
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        const steps: StepInfo[] = [];
+                        const steps: TimelineStep[] = [];
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         (msg.parts as Record<string, any>[]).forEach(
                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -889,7 +931,7 @@ export default function AgentWorkbench() {
                               const ti = part.toolInvocation;
                               steps.push({
                                 index: i,
-                                type: "tool-invocation",
+                                type: "tool-call",
                                 toolName: ti?.toolName ?? "unknown",
                                 toolArgs: ti?.args,
                                 toolResult: ti?.result,
@@ -899,13 +941,14 @@ export default function AgentWorkbench() {
                             if (part.type === "reasoning") {
                               steps.push({
                                 index: i,
-                                type: "reasoning",
+                                type: "thought",
                                 text: part.text,
+                                state: "done",
                               });
                             }
                           }
                         );
-                        return <StepAccordion steps={steps} />;
+                        return <StepTimeline steps={steps} />;
                       })()}
                     </div>
                   </div>
@@ -916,31 +959,10 @@ export default function AgentWorkbench() {
             {isLoading && messages.length > 0 && (
               <div className="flex justify-start">
                 <div className="bg-aura-hover rounded-xl p-3.5 max-w-[85%]">
-                  {/* ★ 实时步骤指示器：展示当前正在执行的工具 */}
+                  {/* ★ 实时步骤时间线 */}
                   {liveSteps.length > 0 && (
-                    <div className="mb-2 space-y-1">
-                      {liveSteps.map((step, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center gap-2 text-xs"
-                        >
-                          {step.type === "reasoning" ? (
-                            <span className="text-amber-400/70 flex items-center gap-1">
-                              <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
-                              💭 思考中...
-                            </span>
-                          ) : step.state === "result" ? (
-                            <span className="text-emerald-400 flex items-center gap-1">
-                              ✓ {step.toolName}
-                            </span>
-                          ) : (
-                            <span className="text-blue-400 flex items-center gap-1">
-                              <span className="inline-block w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-                              🔧 执行: {step.toolName}
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                    <div className="mb-3">
+                      <StepTimeline steps={liveSteps} isStreaming={true} />
                     </div>
                   )}
                   <div className="flex items-center gap-2">
@@ -1051,7 +1073,7 @@ export default function AgentWorkbench() {
                     key={s.sessionId}
                     onClick={() => {
                       setAllSessionsModalOpen(false);
-                      handleSessionClick(s.sessionId);
+                      handleSessionClick(s.sessionId, s.title);
                     }}
                     className={`w-full text-left p-3 rounded-lg transition-colors border ${
                       chatId === s.sessionId

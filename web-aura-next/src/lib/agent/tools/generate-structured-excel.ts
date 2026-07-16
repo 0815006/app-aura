@@ -3,24 +3,26 @@
  *
  * 接收 JSON 数组，调用 exceljs 库生成 Excel 文件。
  * 大模型只需输出结构化 JSON 数据，由本工具完成 .xlsx 文件物化。
+ *
+ * ★ DeepSeek 兼容：使用 resolveWorkspaceAwarePath 写入工作空间。
  */
 import { tool } from "ai";
 import { z } from "zod/v4";
-import { resolveSafePath } from "@/lib/env";
+import { resolveWorkspaceAwarePath } from "@/lib/agent/tool-context";
 import ExcelJS from "exceljs";
 import fs from "fs";
 import path from "path";
 
 export const generateStructuredExcel = tool({
   description:
-    "将 JSON 数组数据生成结构化的 Excel (.xlsx) 文件。接收 sheet 名称、列名映射和行数据数组，自动格式化并写入文件。适用于生成分析报告、数据导出等场景。",
+    "将 JSON 数组数据生成结构化的 Excel (.xlsx) 文件。参数 file_path 是输出路径（相对于工作空间根目录），sheet_name 是工作表名，columns 是列定义，rows 是数据行。适用于生成分析报告、数据导出等场景。",
   parameters: z.object({
-    filePath: z
+    file_path: z
       .string()
       .describe(
         "输出的 .xlsx 文件路径，相对于工作空间根目录，例如 'output/analysis_result.xlsx'"
       ),
-    sheetName: z.string().default("Sheet1").describe("工作表名称"),
+    sheet_name: z.string().default("Sheet1").describe("工作表名称"),
     columns: z
       .array(
         z.object({
@@ -37,19 +39,24 @@ export const generateStructuredExcel = tool({
       ),
   }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  execute: async ({
-    filePath,
-    sheetName = "Sheet1",
-    columns,
-    rows,
-  }: {
-    filePath: string;
-    sheetName?: string;
-    columns: { header: string; key: string; width?: number }[];
-    rows: Record<string, unknown>[];
-  }): Promise<string> => {
+  execute: async (args: any): Promise<string> => {
     try {
-      const safePath = resolveSafePath(filePath);
+      // ★ DeepSeek 兼容：接受 file_path 或 filePath
+      const filePath: string = args.file_path ?? args.filePath ?? "";
+      const sheetName: string = args.sheet_name ?? args.sheetName ?? "Sheet1";
+      const columns: { header: string; key: string; width?: number }[] =
+        args.columns ?? [];
+      const rows: Record<string, unknown>[] = args.rows ?? [];
+
+      if (!filePath) {
+        return JSON.stringify({
+          status: "error",
+          error: "generate_structured_excel 失败: 缺少 file_path 参数",
+        });
+      }
+
+      // ★ 使用 workspace-aware 路径解析（而非 DATA_ROOT 回退）
+      const safePath = resolveWorkspaceAwarePath(filePath);
 
       const parentDir = path.dirname(safePath);
       if (!fs.existsSync(parentDir)) {

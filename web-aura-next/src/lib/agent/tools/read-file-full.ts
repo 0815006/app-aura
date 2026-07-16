@@ -3,6 +3,8 @@
  *
  * 读取小文件的完整文本内容。
  * 仅用于小文件（默认 <500KB），大文件请使用 preview_file_lines 预览。
+ *
+ * ★ DeepSeek 兼容：接受 file_path 或 path。
  */
 import { tool } from "ai";
 import { z } from "zod/v4";
@@ -13,13 +15,23 @@ const MAX_FILE_SIZE = 500 * 1024; // 500KB
 
 export const readFileFull = tool({
   description:
-    "读取指定文件的完整文本内容。仅适用于小于 500KB 的文本文件。对于大文件，请先用 preview_file_lines 预览。返回文件内容字符串。",
+    "读取指定文件的完整文本内容。参数 file_path 是相对于工作空间根目录的文件路径。仅适用于小于 500KB 的文本文件。对于大文件，请先用 preview_file_lines 预览。返回文件内容字符串。",
   parameters: z.object({
-    path: z.string().describe("要读取的文件路径，相对于工作空间根目录，例如 'src/Main.java'"),
+    file_path: z.string().describe("要读取的文件路径，相对于工作空间根目录，例如 'src/Main.java'"),
   }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  execute: async ({ path: filePath }: { path: string }): Promise<string> => {
+  execute: async (args: any): Promise<string> => {
     try {
+      // ★ DeepSeek 兼容：接受 file_path 或 path
+      const filePath: string = args.file_path ?? args.path ?? "";
+
+      if (!filePath) {
+        return JSON.stringify({
+          status: "error",
+          error: "read_file_full 失败: 缺少 file_path 参数",
+        });
+      }
+
       const safePath = resolveWorkspaceAwarePath(filePath);
       const stat = fs.statSync(safePath);
 

@@ -223,78 +223,109 @@ export function RunDetailPanel({ runId }: RunDetailPanelProps) {
       </div>
 
       {/* ========== 步骤时间线 ========== */}
-      {steps.length > 0 && (
-        <div className="bg-aura-surface border border-aura-border rounded-xl p-4">
-          <h3 className="text-sm font-bold text-aura-text mb-4">
-            📝 步骤时间线 ({steps.length} 步)
-          </h3>
+      {steps.length > 0 && (() => {
+        const totalDuration = steps.reduce(
+          (sum, s) => sum + (s.durationMs ?? 0),
+          0
+        );
 
-          <div className="relative">
-            {/* 垂直连线 */}
-            <div className="absolute left-[15px] top-0 bottom-0 w-px bg-aura-border" />
+        return (
+          <div className="bg-aura-surface border border-aura-border rounded-xl p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-aura-text">
+                📝 步骤时间线 ({steps.length} 步)
+              </h3>
+              {totalDuration > 0 && (
+                <span className="text-[10px] text-aura-text-muted">
+                  总耗时: {(totalDuration / 1000).toFixed(1)}s
+                </span>
+              )}
+            </div>
 
-            <div className="space-y-3">
-              {steps.map((step, i) => (
-                <div key={i} className="relative pl-10">
-                  {/* 节点圆点 */}
-                  <div
-                    className={`absolute left-[10px] top-1.5 w-2.5 h-2.5 rounded-full border-2 ${
-                      step.stepType === "thought"
-                        ? "bg-amber-500/30 border-amber-500"
-                        : step.stepType === "tool-call"
-                          ? "bg-blue-500/30 border-blue-500"
-                          : "bg-emerald-500/30 border-emerald-500"
-                    }`}
-                  />
+            <div className="relative">
+              {/* 垂直连线 */}
+              <div className="absolute left-[15px] top-0 bottom-0 w-px bg-aura-border" />
 
-                  {/* 步骤内容 */}
-                  <div className="bg-aura-bg rounded-lg p-3">
-                    {/* 类型标签 */}
-                    <span
-                      className={`text-[10px] font-semibold uppercase ${
+              <div className="space-y-3">
+                {steps.map((step, i) => (
+                  <div key={i} className="relative pl-10">
+                    {/* 节点圆点 */}
+                    <div
+                      className={`absolute left-[10px] top-1.5 w-2.5 h-2.5 rounded-full border-2 ${
                         step.stepType === "thought"
-                          ? "text-amber-400"
+                          ? "bg-amber-500/30 border-amber-500"
                           : step.stepType === "tool-call"
-                            ? "text-blue-400"
-                            : "text-emerald-400"
+                            ? "bg-blue-500/30 border-blue-500"
+                            : "bg-emerald-500/30 border-emerald-500"
                       }`}
-                    >
-                      {step.stepType === "thought"
-                        ? "💭 思考"
-                        : step.stepType === "tool-call"
-                          ? `🔧 ${step.toolName ?? "工具调用"}`
-                          : `✓ 结果${step.toolName ? ` (${step.toolName})` : ""}`}
-                    </span>
+                    />
 
-                    {/* 内容 */}
-                    {step.stepType === "thought" && step.thought && (
-                      <p className="text-xs text-aura-text-muted mt-1.5 leading-relaxed whitespace-pre-wrap italic">
-                        {step.thought.length > 500
-                          ? step.thought.slice(0, 500) + "..."
-                          : step.thought}
-                      </p>
-                    )}
+                    {/* 步骤内容 */}
+                    <div className="bg-aura-bg rounded-lg p-3">
+                      {/* 头部：类型 + 耗时 */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`text-[10px] font-semibold uppercase ${
+                            step.stepType === "thought"
+                              ? "text-amber-400"
+                              : step.stepType === "tool-call"
+                                ? "text-blue-400"
+                                : "text-emerald-400"
+                          }`}
+                        >
+                          {step.stepType === "thought"
+                            ? "💭 思考"
+                            : step.stepType === "tool-call"
+                              ? `🔧 ${step.toolName ?? "工具调用"}`
+                              : `✓ 结果${step.toolName ? ` (${step.toolName})` : ""}`}
+                        </span>
 
-                    {step.stepType === "tool-call" && step.toolArgs && (
-                      <pre className="text-[11px] text-aura-text-secondary mt-1.5 overflow-x-auto max-h-24 bg-aura-surface rounded p-1.5">
-                        {JSON.stringify(step.toolArgs, null, 2)}
-                      </pre>
-                    )}
+                        {/* ★ 耗时 */}
+                        {step.durationMs != null && step.durationMs > 0 && (
+                          <span className="text-[10px] text-aura-text-muted">
+                            ⏱{" "}
+                            {step.durationMs < 1000
+                              ? `${step.durationMs}ms`
+                              : `${(step.durationMs / 1000).toFixed(1)}s`}
+                          </span>
+                        )}
 
-                    {step.stepType === "tool-result" && step.toolResult && (
-                      <pre className="text-[11px] text-emerald-300 mt-1.5 overflow-x-auto max-h-32 bg-aura-surface rounded p-1.5">
-                        {typeof step.toolResult === "string"
-                          ? step.toolResult
-                          : JSON.stringify(step.toolResult, null, 2)}
-                      </pre>
-                    )}
+                        {/* ★ 步骤序号 */}
+                        <span className="text-[10px] text-aura-text-dim ml-auto">
+                          Step {step.stepNumber}
+                        </span>
+                      </div>
+
+                      {/* 内容 */}
+                      {step.stepType === "thought" && step.thought && (
+                        <p className="text-xs text-aura-text-muted mt-1.5 leading-relaxed whitespace-pre-wrap italic">
+                          {step.thought.length > 500
+                            ? step.thought.slice(0, 500) + "..."
+                            : step.thought}
+                        </p>
+                      )}
+
+                      {step.stepType === "tool-call" && step.toolArgs && (
+                        <pre className="text-[11px] text-aura-text-secondary mt-1.5 overflow-x-auto max-h-24 bg-aura-surface rounded p-1.5">
+                          {JSON.stringify(step.toolArgs, null, 2)}
+                        </pre>
+                      )}
+
+                      {step.stepType === "tool-result" && step.toolResult && (
+                        <pre className="text-[11px] text-emerald-300 mt-1.5 overflow-x-auto max-h-32 bg-aura-surface rounded p-1.5">
+                          {typeof step.toolResult === "string"
+                            ? step.toolResult
+                            : JSON.stringify(step.toolResult, null, 2)}
+                        </pre>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

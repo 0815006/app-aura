@@ -3,6 +3,8 @@
  *
  * 读取文件前 N 行，避免大文件 Token 溢出。
  * 适合大模型在分析日志、脚本前先"看一眼"文件内容再决定是否全文读取。
+ *
+ * ★ DeepSeek 兼容：接受 file_path 或 path。
  */
 import { tool } from "ai";
 import { z } from "zod/v4";
@@ -14,9 +16,9 @@ const MAX_PREVIEW_BYTES = 100 * 1024; // 100KB
 
 export const previewFileLines = tool({
   description:
-    "读取文件前 N 行内容，用于预览大文件的开头部分。避免一次性读取整个大文件导致 Token 溢出。默认读取前 50 行，最多 200 行。",
+    "读取文件前 N 行内容，用于预览大文件的开头部分。参数 file_path 是相对于工作空间根目录的文件路径，参数 lines 是预览行数（默认 50，最多 200）。避免一次性读取整个大文件导致 Token 溢出。",
   parameters: z.object({
-    path: z.string().describe("要预览的文件路径，相对于工作空间根目录，例如 'src/Main.java'"),
+    file_path: z.string().describe("要预览的文件路径，相对于工作空间根目录，例如 'src/Main.java'"),
     lines: z
       .number()
       .int()
@@ -26,14 +28,19 @@ export const previewFileLines = tool({
       .describe(`预览行数，默认 50，最大 ${MAX_PREVIEW_LINES}`),
   }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  execute: async ({
-    path: filePath,
-    lines = 50,
-  }: {
-    path: string;
-    lines?: number;
-  }): Promise<string> => {
+  execute: async (args: any): Promise<string> => {
     try {
+      // ★ DeepSeek 兼容：接受 file_path 或 path
+      const filePath: string = args.file_path ?? args.path ?? "";
+      const lines: number = args.lines ?? 50;
+
+      if (!filePath) {
+        return JSON.stringify({
+          status: "error",
+          error: "preview_file_lines 失败: 缺少 file_path 参数",
+        });
+      }
+
       const safePath = resolveWorkspaceAwarePath(filePath);
       const stat = fs.statSync(safePath);
 

@@ -237,14 +237,26 @@ export async function POST(req: Request) {
     // ============================================================
 
     let systemPrompt =
-      "你是 Aura Agent，一个智能体工作台助手。" +
+      "你是 Aura Agent，一个智能体工作台助手。\n\n" +
+      "★★★ 最重要的规则（违反将导致任务失败）★★★\n" +
+      "你必须通过调用工具来完成任务。不能只描述你要做什么 — 你必须实际调用工具。\n" +
+      "每当你想要说「我来创建...」或「我先看看...」时，改为直接调用对应的工具。\n" +
+      "你可以在调用工具的同时附上一句简短说明，但绝不能只输出说明而不调用工具。\n\n" +
       "核心规则：\n" +
-      "1. 每次收到用户消息，先简要说明你的计划（1-2句话），然后立即调用工具执行。\n" +
-      "2. 每次工具调用返回结果后，简要解读结果并说明下一步动作，然后再调用下一个工具。\n" +
+      "1. 收到用户请求后，立即调用工具开始执行。第一轮对话就要产出工具调用。\n" +
+      "2. 每次工具返回结果后，解读结果并继续调用下一个工具，直到任务完成。\n" +
       "3. 所有任务完成后，给出总结性回复。\n" +
       "4. 使用中文回复。\n\n" +
-      "可用工具: create_directory, write_text_file(自动建父目录), list_directory, read_file_full, preview_file_lines, web_search, http_request, execute_python_code, generate_structured_excel, update_memory。" +
-      "路径: 根目录='.'。示例: create_directory('docs') → write_text_file('docs/f.md','内容')。";
+      "可用工具及参数名:\n" +
+      "- write_text_file({ file_path, content }) — 写文件，自动建父目录\n" +
+      "- create_directory({ dir_path }) — 创建目录\n" +
+      "- list_directory({ dir_path }) — 列出目录内容\n" +
+      "- read_file_full({ file_path }) — 读取完整文件\n" +
+      "- preview_file_lines({ file_path, lines? }) — 预览文件前N行\n" +
+      "- web_search, http_request, execute_python_code, generate_structured_excel, update_memory\n\n" +
+      "路径: 所有 file_path/dir_path 均相对于工作空间根目录。\n" +
+      "示例: write_text_file({ file_path: 'HelloWorld.java', content: '...' })\n\n" +
+      "反面示例（绝对禁止）: 只输出「我来创建一个Vue项目，先看看目录结构」然后停止 — 这是错误的！你必须实际调用 list_directory 和 write_text_file。";
 
     // 注入工作空间上下文
     if (workspaceId && activeUserId) {
@@ -294,9 +306,18 @@ export async function POST(req: Request) {
     };
     setToolContext(toolCtx);
 
+    // ★ 步骤计时器 & 用量追踪（跨 onStepFinish / onFinish 共享）
+    let stepStartTime = Date.now();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stepTimings: Array<{ stepNumber: number; durationMs: number; stepUsage: any }> = [];
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = streamText({
-      model: customProvider(activeModelName),
+      model: customProvider(activeModelName, {
+        // ★ 禁用 DeepSeek 思考模式：防止模型在 reasoning 阶段空转后
+        // 以 finishReason="stop" 结束而不实际调用工具
+        thinking: { type: "disabled" as const },
+      }),
       system: systemPrompt,
       messages: aiMessages,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -317,27 +338,33 @@ export async function POST(req: Request) {
         }
       },
 
-      // ★ onStepFinish: 每个 step 完成时实时记录（调试 & 增量持久化预留）
+      // ★ onStepFinish: 每步完成时记录耗时 + Token 用量
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       onStepFinish: async (event: any) => {
-        const { stepNumber, stepType, text, toolCalls, toolResults } = event;
+        const now = Date.now();
+        const durationMs = now - stepStartTime;
+        stepStartTime = now; // 下一步的起点
+
+        const { stepNumber, stepType, text, toolCalls, toolResults, usage: stepUsage } = event;
+
+        // 保存计时数据供 onFinish 持久化
+        stepTimings.push({ stepNumber, durationMs, stepUsage });
+
+        const usageStr = stepUsage
+          ? `prompt=${stepUsage.promptTokens ?? 0} completion=${stepUsage.completionTokens ?? 0} total=${stepUsage.totalTokens ?? 0}`
+          : "N/A";
+
         const tcSummary =
           toolCalls
-            ?.map((tc: any) => `${tc.toolName}(${JSON.stringify(tc.args).slice(0, 80)})`)
-            .join(", ") ?? "N/A";
-        const trSummary =
-          toolResults
-            ?.map((tr: any) => {
-              const preview =
-                typeof tr.result === "string"
-                  ? tr.result.slice(0, 100)
-                  : JSON.stringify(tr.result).slice(0, 100);
-              return `${tr.toolName}: ${preview}`;
-            })
-            .join("; ") ?? "N/A";
+            ?.map((tc: any) => tc.toolName)
+            .join(", ") || "—";
+
         console.log(
-          `[Aura Chat] Step #${stepNumber} [${stepType}]: text="${(text ?? "").slice(0, 100)}", tools=[${tcSummary}], results=[${trSummary}]`
+          `[Aura Chat] ✅ Step #${stepNumber} [${stepType}] · ${durationMs}ms · 🔧 ${tcSummary} · 📊 ${usageStr}`
         );
+        if (text) {
+          console.log(`[Aura Chat]    💬 "${text.slice(0, 120)}"`);
+        }
       },
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -350,7 +377,7 @@ export async function POST(req: Request) {
 
           // ★ 诊断日志
           console.log(
-            `[Aura Chat] onFinish: finishReason=${finishReason}, stepCount=${steps?.length ?? 0}, tokens=${usage?.totalTokens ?? 0}`
+            `[Aura Chat] 🏁 onFinish: finishReason=${finishReason}, stepCount=${steps?.length ?? 0}, totalTokens=${usage?.totalTokens ?? 0}`
           );
           if (steps && Array.isArray(steps)) {
             steps.forEach((s: any, i: number) => {
@@ -464,7 +491,7 @@ export async function POST(req: Request) {
 
           console.log(`[Aura Chat] Run 已持久化: ${runId}`);
 
-          // 2.2 插入 run_steps（遍历每个 step）
+          // 2.2 插入 run_steps（遍历每个 step，含耗时 & 用量）
           if (steps && Array.isArray(steps)) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             for (let i = 0; i < steps.length; i++) {
@@ -472,7 +499,12 @@ export async function POST(req: Request) {
               const step: any = steps[i];
               const now = new Date();
 
-              // a. 如果有思考文本（stepType === 'thought' 或 step.text 非空且无 toolCalls）
+              // ★ 从 onStepFinish 收集的计时数据中查找匹配的 step
+              const timing = stepTimings.find((t) => t.stepNumber === i + 1);
+              const durationMs = timing?.durationMs ?? null;
+              const stepUsage = timing?.stepUsage ?? null;
+
+              // a. 如果有思考文本
               const thoughtText: string =
                 typeof step.text === "string" ? step.text : "";
               const hasText = thoughtText.trim().length > 0;
@@ -483,6 +515,7 @@ export async function POST(req: Request) {
                   stepNumber: i + 1,
                   stepType: "thought",
                   thought: thoughtText,
+                  durationMs,
                   createTime: now,
                 });
               }
@@ -501,6 +534,7 @@ export async function POST(req: Request) {
                     stepType: "tool-call",
                     toolName: tc.toolName ?? "unknown",
                     toolArgs: tc.args ?? null,
+                    durationMs,
                     createTime: now,
                   });
 
@@ -530,6 +564,7 @@ export async function POST(req: Request) {
                       typeof tr.result === "string"
                         ? { output: tr.result }
                         : (tr.result ?? null),
+                    durationMs,
                     createTime: now,
                   });
                 }
