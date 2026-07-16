@@ -1,107 +1,73 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
   <!--
-    Aura — 极简科技风 · 光晕与多维形态
-    字母「A」几何抽象化，顶端镂空置换为倾斜光晕环（多维透视）
-    腿部线条接近光环处渐隐融合，寓意硬件/系统与智能气场的完美结合
-    配色：深空蓝 #0B1026 底 · 极光绿→冰蓝呼吸渐变
+    Aura — 能量块 Logo
+    蓝绿渐变正方体，深邃夜空蓝底色，极光绿→冰蓝呼吸渐变
   -->
   <defs>
-    <!-- ========================================================== -->
-    <!-- 极光呼吸渐变：翠绿 → 碧青 → 冰蓝 (自上而下)              -->
-    <!-- ========================================================== -->
-    <linearGradient id="aurora" x1="0" y1="0" x2="0" y2="1">
+    <!-- 顶面渐变：冰蓝 → 碧青 (最亮面) -->
+    <linearGradient id="faceTop" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%"   stop-color="#38BDF8"/>
-      <stop offset="35%"  stop-color="#2DD4BF"/>
-      <stop offset="70%"  stop-color="#34D399"/>
+      <stop offset="50%"  stop-color="#2DD4BF"/>
+      <stop offset="100%" stop-color="#34D399"/>
+    </linearGradient>
+
+    <!-- 左面渐变：碧青 → 翠绿 -->
+    <linearGradient id="faceLeft" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#2DD4BF"/>
       <stop offset="100%" stop-color="#22C55E"/>
     </linearGradient>
 
-    <!-- ========================================================== -->
-    <!-- A 字腿部渐隐渐变（userSpaceOnUse，精确控制渐隐区间）       -->
-    <!-- 底部全饱和 → 接近光环时半透明 → 光环内部全透              -->
-    <!-- ========================================================== -->
-    <linearGradient id="strokeFade" x1="0" y1="190" x2="0" y2="60"
-                    gradientUnits="userSpaceOnUse">
-      <stop offset="0%"   stop-color="#22C55E" stop-opacity="1.00"/>
-      <stop offset="30%"  stop-color="#34D399" stop-opacity="1.00"/>
-      <stop offset="55%"  stop-color="#2DD4BF" stop-opacity="0.95"/>
-      <stop offset="70%"  stop-color="#38BDF8" stop-opacity="0.60"/>
-      <stop offset="85%"  stop-color="#38BDF8" stop-opacity="0.18"/>
-      <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
+    <!-- 右面渐变：翠绿 → 深绿 (最暗面) -->
+    <linearGradient id="faceRight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#34D399"/>
+      <stop offset="100%" stop-color="#10B981"/>
     </linearGradient>
 
-    <!-- ========================================================== -->
-    <!-- 光环填充：中心透明 → 边缘极光发光                          -->
-    <!-- ========================================================== -->
-    <radialGradient id="ringGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="60%"  stop-color="#2DD4BF" stop-opacity="0"/>
-      <stop offset="78%"  stop-color="#2DD4BF" stop-opacity="0.15"/>
-      <stop offset="90%"  stop-color="#38BDF8" stop-opacity="0.55"/>
-      <stop offset="97%"  stop-color="#38BDF8" stop-opacity="0.85"/>
-      <stop offset="100%" stop-color="#34D399" stop-opacity="0.95"/>
-    </radialGradient>
-
-    <!-- ========================================================== -->
-    <!-- 光环外部柔光扩散 (大气感)                                   -->
-    <!-- ========================================================== -->
-    <radialGradient id="outerAura" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"   stop-color="#2DD4BF" stop-opacity="0.22"/>
-      <stop offset="50%"  stop-color="#2DD4BF" stop-opacity="0.06"/>
+    <!-- 外发光 -->
+    <radialGradient id="outerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#2DD4BF" stop-opacity="0.25"/>
+      <stop offset="50%"  stop-color="#2DD4BF" stop-opacity="0.08"/>
       <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
-  <!-- ============================================================ -->
-  <!-- 背景：深空蓝圆角方形                                         -->
-  <!-- ============================================================ -->
+  <!-- 背景 -->
   <rect width="200" height="200" rx="36" fill="#0B1026"/>
 
-  <!-- ============================================================ -->
-  <!-- 光环外部柔光 — 先画，在 A 字后面                             -->
-  <!-- ============================================================ -->
-  <ellipse cx="100" cy="46" rx="62" ry="52" fill="url(#outerAura)"/>
+  <!-- 外发光 -->
+  <circle cx="100" cy="95" r="80" fill="url(#outerGlow)"/>
 
   <!-- ============================================================ -->
-  <!-- ★ A 字母主体                                                -->
-  <!-- 三条粗几何线：左腿 / 右腿 / 横杠                              -->
-  <!-- 使用渐隐渐变，腿部顶端接近光环处透明 → 融入能量场             -->
+  <!-- 等距正方体 (isometric cube)                                  -->
+  <!-- 三面可见：顶 / 左 / 右                                       -->
   <!-- ============================================================ -->
-  <g stroke-linecap="round" stroke-linejoin="round">
-    <!-- 左腿 -->
-    <line x1="46" y1="178" x2="80" y2="72"
-          stroke="url(#strokeFade)" stroke-width="18"/>
-    <!-- 右腿 -->
-    <line x1="154" y1="178" x2="120" y2="72"
-          stroke="url(#strokeFade)" stroke-width="18"/>
-    <!-- 横杠（低于光环，全饱和极光渐变） -->
-    <line x1="56" y1="120" x2="144" y2="120"
-          stroke="url(#aurora)" stroke-width="16"/>
+  <g stroke="#0B1026" stroke-width="2" stroke-linejoin="round">
+    <!-- 顶面 (菱形) -->
+    <polygon points="100,28  156,58  100,88  44,58"
+             fill="url(#faceTop)"/>
+    <!-- 左面 -->
+    <polygon points="44,58  100,88  100,148  44,118"
+             fill="url(#faceLeft)"/>
+    <!-- 右面 -->
+    <polygon points="100,88  156,58  156,118  100,148"
+             fill="url(#faceRight)"/>
   </g>
 
-  <!-- ============================================================ -->
-  <!-- ★ 光晕环 (多维透视 — 椭圆模拟 3D 倾斜)                      -->
-  <!-- 渲染在 A 字上方，覆盖腿部渐隐区，形成顶端「镂空替换」效果     -->
-  <!-- ============================================================ -->
-  <!-- 环主体填充 -->
-  <ellipse cx="100" cy="46" rx="34" ry="28" fill="url(#ringGlow)"/>
-  <!-- 环外缘 (粗，高亮) -->
-  <ellipse cx="100" cy="46" rx="34" ry="28"
-           stroke="url(#aurora)" stroke-width="2.5" fill="none" opacity="0.92"/>
-  <!-- 环内缘 (细，柔和) -->
-  <ellipse cx="100" cy="46" rx="27" ry="22"
-           stroke="url(#aurora)" stroke-width="1" fill="none" opacity="0.35"/>
-  <!-- 环心微光 -->
-  <ellipse cx="100" cy="46" rx="3.5" ry="3"
-           fill="#38BDF8" opacity="0.5"/>
+  <!-- 棱线高光 -->
+  <g stroke="#38BDF8" stroke-width="1.2" fill="none" opacity="0.5">
+    <!-- 顶棱 -->
+    <line x1="100" y1="28" x2="156" y2="58"/>
+    <line x1="100" y1="28" x2="44"  y2="58"/>
+    <!-- 左棱 -->
+    <line x1="44"  y1="58" x2="44"  y2="118"/>
+    <!-- 右棱 -->
+    <line x1="156" y1="58" x2="156" y2="118"/>
+  </g>
 
-  <!-- ============================================================ -->
-  <!-- 能量粒子 (环绕光环的悬浮光点 — 营造呼吸感)                   -->
-  <!-- ============================================================ -->
-  <circle cx="124" cy="38"  r="1.8" fill="#38BDF8" opacity="0.6"/>
-  <circle cx="76"  cy="34"  r="1.4" fill="#2DD4BF" opacity="0.5"/>
-  <circle cx="122" cy="58"  r="1.2" fill="#2DD4BF" opacity="0.45"/>
-  <circle cx="78"  cy="56"  r="1.0" fill="#34D399" opacity="0.42"/>
-  <circle cx="106" cy="24"  r="0.9" fill="#38BDF8" opacity="0.38"/>
-  <circle cx="94"  cy="22"  r="0.7" fill="#34D399" opacity="0.35"/>
-  <circle cx="112" cy="68"  r="0.8" fill="#2DD4BF" opacity="0.30"/>
+  <!-- 能量粒子 -->
+  <circle cx="162" cy="56"  r="1.6" fill="#38BDF8" opacity="0.55"/>
+  <circle cx="40"  cy="56"  r="1.3" fill="#2DD4BF" opacity="0.50"/>
+  <circle cx="100" cy="24"  r="1.4" fill="#38BDF8" opacity="0.50"/>
+  <circle cx="162" cy="120" r="1.0" fill="#34D399" opacity="0.40"/>
+  <circle cx="40"  cy="120" r="1.0" fill="#2DD4BF" opacity="0.35"/>
 </svg>
