@@ -100,7 +100,11 @@ export default function AgentWorkbench() {
   );
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
+  const [editContent, setEditContent] = useState<string>("");
+  const [isDirty, setIsDirty] = useState(false);
   const [fileLoading, setFileLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
 
   // 左侧栏宽度（刷新后恢复，默认 240px）
   const [leftWidth, setLeftWidth] = useState(() =>
@@ -229,6 +233,7 @@ export default function AgentWorkbench() {
   const handleFileSelect = useCallback(
     async (filePath: string) => {
       setSelectedFile(filePath);
+      setSaveMessage("");
       if (!workspaceId) return;
 
       setFileLoading(true);
@@ -237,11 +242,21 @@ export default function AgentWorkbench() {
           `/api/workspaces/file?id=${workspaceId}&subpath=${encodeURIComponent(filePath)}`
         );
         const data = await res.json();
-        if (data.code === 200 && data.data?.content) {
-          setFileContent(data.data.content);
+        if (data.code === 200 && data.data) {
+          const content = data.data.content ?? "";
+          setFileContent(content);
+          setEditContent(content);
+          setIsDirty(false);
+        } else if (data.code === 400 && data.message?.includes("过大")) {
+          setFileContent("[文件过大，无法编辑]");
+          setEditContent("");
+        } else {
+          setFileContent(`[无法加载文件: ${data.message || filePath}]`);
+          setEditContent("");
         }
       } catch {
         setFileContent(`[无法加载文件: ${filePath}]`);
+        setEditContent("");
       } finally {
         setFileLoading(false);
       }
@@ -253,6 +268,9 @@ export default function AgentWorkbench() {
     setWorkspaceId(id);
     setSelectedFile(null);
     setFileContent("");
+    setEditContent("");
+    setIsDirty(false);
+    setSaveMessage("");
     setChatId(null);
     chatIdRef.current = null;
     setSessionTitle("");
@@ -424,6 +442,57 @@ export default function AgentWorkbench() {
   }, [fetchRecentSessions]);
 
   // ============================================================
+  // 文件保存
+  // ============================================================
+
+  const handleSave = useCallback(async () => {
+    if (!selectedFile || !workspaceId || !isDirty) return;
+
+    setSaveLoading(true);
+    setSaveMessage("");
+    try {
+      const res = await fetch(
+        `/api/workspaces/file?id=${workspaceId}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: selectedFile, content: editContent }),
+        }
+      );
+      const data = await res.json();
+      if (data.code === 200) {
+        setFileContent(editContent);
+        setIsDirty(false);
+        setSaveMessage("已保存");
+        setTimeout(() => setSaveMessage(""), 2000);
+      } else {
+        setSaveMessage(`保存失败: ${data.message}`);
+      }
+    } catch {
+      setSaveMessage("保存失败: 网络错误");
+    } finally {
+      setSaveLoading(false);
+    }
+  }, [selectedFile, workspaceId, isDirty, editContent]);
+
+  // ============================================================
+  // Ctrl+S 快捷键
+  // ============================================================
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (selectedFile && isDirty && !saveLoading) {
+          handleSave();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedFile, isDirty, saveLoading, handleSave]);
+
+  // ============================================================
   // 分隔线拖拽
   // ============================================================
 
@@ -562,6 +631,7 @@ export default function AgentWorkbench() {
             onFileSelect={handleFileSelect}
             onWorkspaceChange={handleWorkspaceChange}
             refreshToken={refreshToken}
+            onRefreshNeeded={() => setRefreshToken((prev) => prev + 1)}
           />
         </div>
       )}
@@ -612,15 +682,42 @@ export default function AgentWorkbench() {
                 📝 预览区
               </h2>
             </div>
-            {selectedFile && (
-              <span className="text-xs text-aura-text-muted truncate ml-4 max-w-[50%]">
-                {selectedFile}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {selectedFile && (
+                <>
+                  {/* 保存状态提示 */}
+                  {saveMessage && (
+                    <span className={`text-xs ${
+                      saveMessage === "已保存" ? "text-emerald-400" : "text-red-400"
+                    }`}>
+                      {saveMessage}
+                    </span>
+                  )}
+                  {/* 保存按钮 */}
+                  <button
+                    onClick={handleSave}
+                    disabled={!isDirty || saveLoading}
+                    className={`text-xs px-2.5 py-1 rounded transition-colors ${
+                      isDirty
+                        ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                        : "text-aura-text-muted bg-aura-hover cursor-default"
+                    } disabled:opacity-50`}
+                    title="保存 (Ctrl+S)"
+                  >
+                    {saveLoading ? "保存中..." : isDirty ? "💾 保存 *" : "💾 已保存"}
+                  </button>
+                </>
+              )}
+              {selectedFile && (
+                <span className="text-xs text-aura-text-muted truncate ml-2 max-w-[30%]">
+                  {selectedFile}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* 预览区内容 */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 flex flex-col min-h-0">
             {/* ★ Run 详情模式 */}
             {selectedRunId ? (
               <RunDetailPanel runId={selectedRunId} />
@@ -639,11 +736,36 @@ export default function AgentWorkbench() {
                   加载中...
                 </span>
               </div>
+            ) : fileContent.startsWith("[文件过大") || fileContent.startsWith("[无法加载") ? (
+              <div className="flex items-center justify-center h-full p-4">
+                <div className="text-center">
+                  <p className="text-lg mb-2">⚠️</p>
+                  <p className="text-sm text-aura-text-muted">{fileContent}</p>
+                </div>
+              </div>
             ) : (
-              <div className="p-4">
-                <pre className="text-sm text-aura-text font-mono whitespace-pre-wrap break-all">
-                  {fileContent}
-                </pre>
+              <div className="flex-1 flex flex-col min-h-0">
+                <textarea
+                  value={editContent}
+                  onChange={(e) => {
+                    setEditContent(e.target.value);
+                    setIsDirty(e.target.value !== fileContent);
+                  }}
+                  className="flex-1 w-full bg-transparent text-sm text-aura-text font-mono
+                             resize-none p-4 focus:outline-none focus:ring-1 focus:ring-emerald-500/50
+                             placeholder-aura-text-dim"
+                  placeholder="文件内容为空"
+                  spellCheck={false}
+                />
+                {/* 底部状态栏：行数信息 */}
+                <div className="px-4 py-1 border-t border-aura-border bg-aura-bg flex items-center justify-between">
+                  <span className="text-[10px] text-aura-text-dim">
+                    {editContent.split("\n").length} 行 · {editContent.length} 字符
+                  </span>
+                  <span className="text-[10px] text-aura-text-dim">
+                    Ctrl+S 保存
+                  </span>
+                </div>
               </div>
             )}
           </div>

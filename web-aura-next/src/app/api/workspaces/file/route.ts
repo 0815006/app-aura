@@ -124,3 +124,216 @@ export async function GET(req: Request) {
     );
   }
 }
+
+/**
+ * POST /api/workspaces/file?id=uuid
+ * 创建或覆写工作空间内指定文件
+ *
+ * Body: { path: string, content?: string }
+ * - path: 相对于工作空间根目录的文件路径
+ * - content: 文件内容（可选，默认空字符串）
+ */
+export async function POST(req: Request) {
+  if (!isServerMode()) {
+    return Response.json(
+      { code: 400, message: "仅服务端模式可用" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    // 1. 鉴权
+    const auth = await getAuthenticatedUser(req);
+    if (!auth) {
+      return Response.json(
+        { code: 401, message: "请先登录" },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const workspaceId = searchParams.get("id");
+
+    if (!workspaceId) {
+      return Response.json(
+        { code: 400, message: "缺少工作空间 id 参数" },
+        { status: 400 }
+      );
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = (await req.json()) as Record<string, any>;
+    const filePath = String(body.path ?? "").trim();
+    const content = String(body.content ?? "");
+
+    if (!filePath) {
+      return Response.json(
+        { code: 400, message: "缺少 path 参数" },
+        { status: 400 }
+      );
+    }
+
+    // 2. 校验 workspace 归属
+    const [ws] = await db
+      .select({ id: workspaces.id, userId: workspaces.userId })
+      .from(workspaces)
+      .where(
+        and(eq(workspaces.id, workspaceId), eq(workspaces.userId, auth.userId))
+      )
+      .limit(1);
+
+    if (!ws) {
+      return Response.json(
+        { code: 404, message: "工作空间不存在或无权访问" },
+        { status: 404 }
+      );
+    }
+
+    // 3. 构建路径并双重越权校验
+    const dataRoot = getDataRoot();
+    const userRoot = path.resolve(dataRoot, "workspaces", `user_${auth.userId}`);
+    const workspaceRoot = path.resolve(userRoot, workspaceId);
+    let targetPath = path.resolve(workspaceRoot, filePath);
+
+    // 兼容旧版工作空间
+    if (!fs.existsSync(workspaceRoot)) {
+      const legacyRoot = path.resolve(dataRoot, "workspaces", workspaceId);
+      if (fs.existsSync(legacyRoot)) {
+        targetPath = path.resolve(legacyRoot, filePath);
+      }
+    }
+
+    // 双重校验
+    if (!targetPath.startsWith(workspaceRoot) && !targetPath.startsWith(path.resolve(dataRoot, "workspaces", workspaceId))) {
+      return Response.json(
+        { code: 403, message: "路径越权" },
+        { status: 403 }
+      );
+    }
+
+    // 确保父目录存在
+    const parentDir = path.dirname(targetPath);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
+    }
+
+    // 写入文件
+    fs.writeFileSync(targetPath, content, "utf-8");
+    const stat = fs.statSync(targetPath);
+
+    return Response.json({
+      code: 200,
+      message: "文件已保存",
+      data: {
+        path: filePath,
+        size: stat.size,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "未知错误";
+    return Response.json(
+      { code: 500, message: `保存文件失败: ${message}` },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/workspaces/file?id=uuid&subpath=path/to/file
+ * 删除工作空间内指定文件或目录
+ *
+ * 如果是目录，递归删除其所有内容。
+ */
+export async function DELETE(req: Request) {
+  if (!isServerMode()) {
+    return Response.json(
+      { code: 400, message: "仅服务端模式可用" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    // 1. 鉴权
+    const auth = await getAuthenticatedUser(req);
+    if (!auth) {
+      return Response.json(
+        { code: 401, message: "请先登录" },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const workspaceId = searchParams.get("id");
+    const filePath = searchParams.get("subpath");
+
+    if (!workspaceId || !filePath) {
+      return Response.json(
+        { code: 400, message: "缺少 id 或 subpath 参数" },
+        { status: 400 }
+      );
+    }
+
+    // 2. 校验 workspace 归属
+    const [ws] = await db
+      .select({ id: workspaces.id, userId: workspaces.userId })
+      .from(workspaces)
+      .where(
+        and(eq(workspaces.id, workspaceId), eq(workspaces.userId, auth.userId))
+      )
+      .limit(1);
+
+    if (!ws) {
+      return Response.json(
+        { code: 404, message: "工作空间不存在或无权访问" },
+        { status: 404 }
+      );
+    }
+
+    // 3. 构建路径并双重越权校验
+    const dataRoot = getDataRoot();
+    const userRoot = path.resolve(dataRoot, "workspaces", `user_${auth.userId}`);
+    const workspaceRoot = path.resolve(userRoot, workspaceId);
+    let targetPath = path.resolve(workspaceRoot, filePath);
+
+    // 兼容旧版工作空间
+    if (!fs.existsSync(workspaceRoot)) {
+      const legacyRoot = path.resolve(dataRoot, "workspaces", workspaceId);
+      if (fs.existsSync(legacyRoot)) {
+        targetPath = path.resolve(legacyRoot, filePath);
+      }
+    }
+
+    // 双重校验
+    if (!targetPath.startsWith(workspaceRoot) && !targetPath.startsWith(path.resolve(dataRoot, "workspaces", workspaceId))) {
+      return Response.json(
+        { code: 403, message: "路径越权" },
+        { status: 403 }
+      );
+    }
+
+    if (!fs.existsSync(targetPath)) {
+      return Response.json(
+        { code: 404, message: "文件或目录不存在" },
+        { status: 404 }
+      );
+    }
+
+    const stat = fs.statSync(targetPath);
+    if (stat.isDirectory()) {
+      fs.rmSync(targetPath, { recursive: true });
+    } else {
+      fs.unlinkSync(targetPath);
+    }
+
+    return Response.json({
+      code: 200,
+      message: "已删除",
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "未知错误";
+    return Response.json(
+      { code: 500, message: `删除失败: ${message}` },
+      { status: 500 }
+    );
+  }
+}

@@ -33,6 +33,8 @@ interface WorkspaceTreeProps {
   onWorkspaceChange: (id: string | null) => void;
   /** 新增文件/目录后触发的刷新标记 */
   refreshToken?: number;
+  /** CRUD 操作后通知父组件（用于刷新预览等） */
+  onRefreshNeeded?: () => void;
 }
 
 // ============================================================
@@ -44,6 +46,7 @@ export function WorkspaceTree({
   onFileSelect,
   onWorkspaceChange,
   refreshToken,
+  onRefreshNeeded,
 }: WorkspaceTreeProps) {
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -69,6 +72,14 @@ export function WorkspaceTree({
     y: number;
     entry: FileEntry;
   } | null>(null);
+
+  // CRUD 对话框状态
+  const [createFileTarget, setCreateFileTarget] = useState<FileEntry | null>(null);
+  const [createDirTarget, setCreateDirTarget] = useState<FileEntry | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FileEntry | null>(null);
+  const [newItemName, setNewItemName] = useState("");
+  const [crudLoading, setCrudLoading] = useState(false);
+  const [crudError, setCrudError] = useState("");
 
   // ============================================================
   // 加载根目录
@@ -226,6 +237,120 @@ export function WorkspaceTree({
     setDirChildren({});
     setExpandedDirs(new Set());
   };
+
+  // ============================================================
+  // CRUD 操作：刷新树
+  // ============================================================
+
+  const refreshTree = useCallback(() => {
+    setDirChildren({});
+    setExpandedDirs(new Set());
+    loadRoot();
+    onRefreshNeeded?.();
+  }, [loadRoot, onRefreshNeeded]);
+
+  // ============================================================
+  // CRUD 操作：新建文件
+  // ============================================================
+
+  const handleCreateFile = useCallback(async () => {
+    const parentEntry = createFileTarget;
+    if (!parentEntry || !workspaceId || !newItemName.trim()) return;
+
+    setCrudLoading(true);
+    setCrudError("");
+
+    try {
+      // 自动追加 .txt 如果没有扩展名
+      let fileName = newItemName.trim();
+      if (!fileName.includes(".")) {
+        fileName += ".txt";
+      }
+      const filePath = parentEntry.path
+        ? `${parentEntry.path}/${fileName}`
+        : fileName;
+
+      const res = await api.post("/api/workspaces/file", {
+        path: filePath,
+        content: "",
+      });
+
+      if (res.code === 200) {
+        setCreateFileTarget(null);
+        setNewItemName("");
+        refreshTree();
+      } else {
+        setCrudError(res.message);
+      }
+    } catch {
+      setCrudError("创建文件失败");
+    } finally {
+      setCrudLoading(false);
+    }
+  }, [createFileTarget, workspaceId, newItemName, refreshTree]);
+
+  // ============================================================
+  // CRUD 操作：新建目录
+  // ============================================================
+
+  const handleCreateDir = useCallback(async () => {
+    const parentEntry = createDirTarget;
+    if (!parentEntry || !workspaceId || !newItemName.trim()) return;
+
+    setCrudLoading(true);
+    setCrudError("");
+
+    try {
+      const dirPath = parentEntry.path
+        ? `${parentEntry.path}/${newItemName.trim()}`
+        : newItemName.trim();
+
+      const res = await api.post("/api/workspaces/tree", {
+        path: dirPath,
+      });
+
+      if (res.code === 200) {
+        setCreateDirTarget(null);
+        setNewItemName("");
+        refreshTree();
+      } else {
+        setCrudError(res.message);
+      }
+    } catch {
+      setCrudError("创建目录失败");
+    } finally {
+      setCrudLoading(false);
+    }
+  }, [createDirTarget, workspaceId, newItemName, refreshTree]);
+
+  // ============================================================
+  // CRUD 操作：删除文件/目录
+  // ============================================================
+
+  const handleDeleteEntry = useCallback(async () => {
+    const target = deleteTarget;
+    if (!target || !workspaceId) return;
+
+    setCrudLoading(true);
+    setCrudError("");
+
+    try {
+      const res = await api.delete(
+        `/api/workspaces/file?id=${workspaceId}&subpath=${encodeURIComponent(target.path)}`
+      );
+
+      if (res.code === 200) {
+        setDeleteTarget(null);
+        refreshTree();
+      } else {
+        setCrudError(res.message);
+      }
+    } catch {
+      setCrudError("删除失败");
+    } finally {
+      setCrudLoading(false);
+    }
+  }, [deleteTarget, workspaceId, refreshTree]);
 
   // ============================================================
   // 右键菜单
@@ -525,7 +650,7 @@ export function WorkspaceTree({
       )}
 
       {/* ================================================ */}
-      {/* 右键菜单（简化版） */}
+      {/* 右键菜单 */}
       {/* ================================================ */}
       {contextMenu && (
         <>
@@ -541,27 +666,228 @@ export function WorkspaceTree({
             className="fixed z-50 bg-aura-hover border border-aura-border rounded-lg py-1 shadow-xl min-w-[160px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
-            <p className="px-3 py-1 text-[10px] text-aura-text-muted uppercase">
+            <p className="px-3 py-1 text-[10px] text-aura-text-muted uppercase truncate max-w-[200px]">
               {contextMenu.entry.name}
             </p>
             <div className="border-t border-aura-border mt-1" />
+
+            {/* 目录：打开 */}
+            {contextMenu.entry.isDirectory && (
+              <button
+                onClick={() => {
+                  toggleDir(contextMenu.entry);
+                  closeContextMenu();
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs text-aura-text hover:bg-aura-border transition-colors"
+              >
+                📂 {expandedDirs.has(contextMenu.entry.path) ? "折叠" : "展开"}目录
+              </button>
+            )}
+
+            {/* 文件：打开 */}
+            {contextMenu.entry.isFile && (
+              <button
+                onClick={() => {
+                  onFileSelect(contextMenu.entry.path);
+                  closeContextMenu();
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs text-aura-text hover:bg-aura-border transition-colors"
+              >
+                📄 打开文件
+              </button>
+            )}
+
+            <div className="border-t border-aura-border my-0.5" />
+
+            {/* 目录上：新建文件和新建目录 */}
+            {contextMenu.entry.isDirectory && (
+              <>
+                <button
+                  onClick={() => {
+                    setCreateFileTarget(contextMenu.entry);
+                    setNewItemName("");
+                    setCrudError("");
+                    closeContextMenu();
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-emerald-400 hover:bg-aura-border transition-colors"
+                >
+                  📄 新建文件
+                </button>
+                <button
+                  onClick={() => {
+                    setCreateDirTarget(contextMenu.entry);
+                    setNewItemName("");
+                    setCrudError("");
+                    closeContextMenu();
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-emerald-400 hover:bg-aura-border transition-colors"
+                >
+                  📁 新建目录
+                </button>
+                <div className="border-t border-aura-border my-0.5" />
+              </>
+            )}
+
+            {/* 删除（文件和目录都有） */}
             <button
               onClick={() => {
-                onFileSelect(contextMenu.entry.path);
+                setDeleteTarget(contextMenu.entry);
+                setCrudError("");
                 closeContextMenu();
               }}
-              className="w-full text-left px-3 py-1.5 text-xs text-aura-text hover:bg-aura-border transition-colors"
+              className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-aura-border transition-colors"
             >
-              📄 打开文件
+              🗑️ 删除
             </button>
+
+            <div className="border-t border-aura-border my-0.5" />
+
+            {/* 复制路径 */}
             <button
-              onClick={closeContextMenu}
+              onClick={() => {
+                navigator.clipboard.writeText(contextMenu.entry.path).catch(() => {});
+                closeContextMenu();
+              }}
               className="w-full text-left px-3 py-1.5 text-xs text-aura-text-muted hover:bg-aura-border transition-colors"
             >
               📋 复制路径
             </button>
           </div>
         </>
+      )}
+
+      {/* ================================================ */}
+      {/* 新建文件弹窗 */}
+      {/* ================================================ */}
+      {createFileTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-aura-surface border border-aura-border rounded-xl p-6 w-96 shadow-2xl">
+            <h3 className="text-lg font-bold text-emerald-400 mb-2">
+              📄 新建文件
+            </h3>
+            <p className="text-xs text-aura-text-muted mb-4">
+              在 {createFileTarget.path || "根目录"} 中创建
+            </p>
+            <input
+              value={newItemName}
+              onChange={(e) => setNewItemName(e.target.value)}
+              placeholder="输入文件名（如 hello.txt）..."
+              className="w-full bg-aura-hover border border-aura-border rounded-lg px-4 py-2.5 text-sm text-aura-text placeholder-aura-text-muted focus:outline-none focus:border-emerald-500 mb-4"
+              onKeyDown={(e) => e.key === "Enter" && handleCreateFile()}
+              autoFocus
+            />
+            {crudError && (
+              <p className="text-red-400 text-xs mb-3">{crudError}</p>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setCreateFileTarget(null);
+                  setNewItemName("");
+                  setCrudError("");
+                }}
+                className="px-4 py-2 text-sm text-aura-text-secondary hover:text-aura-text transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateFile}
+                disabled={!newItemName.trim() || crudLoading}
+                className="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-aura-hover disabled:text-aura-text-muted text-white rounded-lg transition-colors"
+              >
+                {crudLoading ? "创建中..." : "创建"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================ */}
+      {/* 新建目录弹窗 */}
+      {/* ================================================ */}
+      {createDirTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-aura-surface border border-aura-border rounded-xl p-6 w-96 shadow-2xl">
+            <h3 className="text-lg font-bold text-emerald-400 mb-2">
+              📁 新建目录
+            </h3>
+            <p className="text-xs text-aura-text-muted mb-4">
+              在 {createDirTarget.path || "根目录"} 中创建
+            </p>
+            <input
+              value={newItemName}
+              onChange={(e) => setNewItemName(e.target.value)}
+              placeholder="输入目录名称..."
+              className="w-full bg-aura-hover border border-aura-border rounded-lg px-4 py-2.5 text-sm text-aura-text placeholder-aura-text-muted focus:outline-none focus:border-emerald-500 mb-4"
+              onKeyDown={(e) => e.key === "Enter" && handleCreateDir()}
+              autoFocus
+            />
+            {crudError && (
+              <p className="text-red-400 text-xs mb-3">{crudError}</p>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setCreateDirTarget(null);
+                  setNewItemName("");
+                  setCrudError("");
+                }}
+                className="px-4 py-2 text-sm text-aura-text-secondary hover:text-aura-text transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateDir}
+                disabled={!newItemName.trim() || crudLoading}
+                className="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-aura-hover disabled:text-aura-text-muted text-white rounded-lg transition-colors"
+              >
+                {crudLoading ? "创建中..." : "创建"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================ */}
+      {/* 删除确认弹窗 */}
+      {/* ================================================ */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-aura-surface border border-aura-border rounded-xl p-6 w-96 shadow-2xl">
+            <h3 className="text-lg font-bold text-red-400 mb-2">
+              🗑️ 确认删除
+            </h3>
+            <p className="text-sm text-aura-text mb-1">
+              确定要删除 <span className="text-emerald-400 font-semibold">{deleteTarget.name}</span> 吗？
+            </p>
+            {deleteTarget.isDirectory && (
+              <p className="text-xs text-red-400/80 mb-3">
+                ⚠️ 该目录及其包含的所有内容将被永久删除
+              </p>
+            )}
+            {crudError && (
+              <p className="text-red-400 text-xs mb-3">{crudError}</p>
+            )}
+            <div className="flex gap-2 justify-end mt-4">
+              <button
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setCrudError("");
+                }}
+                className="px-4 py-2 text-sm text-aura-text-secondary hover:text-aura-text transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleDeleteEntry}
+                disabled={crudLoading}
+                className="px-4 py-2 text-sm bg-red-600 hover:bg-red-500 disabled:bg-aura-hover disabled:text-aura-text-muted text-white rounded-lg transition-colors"
+              >
+                {crudLoading ? "删除中..." : "删除"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

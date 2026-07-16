@@ -145,3 +145,110 @@ export async function GET(req: Request) {
     );
   }
 }
+
+/**
+ * POST /api/workspaces/tree?id=uuid
+ * 在工作空间内创建新目录
+ *
+ * Body: { path: string }
+ * - path: 相对于工作空间根目录的目录路径
+ */
+export async function POST(req: Request) {
+  if (!isServerMode()) {
+    return Response.json(
+      { code: 400, message: "仅服务端模式可用" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    // 1. 鉴权
+    const auth = await getAuthenticatedUser(req);
+    if (!auth) {
+      return Response.json(
+        { code: 401, message: "请先登录" },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const workspaceId = searchParams.get("id");
+
+    if (!workspaceId) {
+      return Response.json(
+        { code: 400, message: "缺少工作空间 id 参数" },
+        { status: 400 }
+      );
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = (await req.json()) as Record<string, any>;
+    const dirPath = String(body.path ?? "").trim();
+
+    if (!dirPath) {
+      return Response.json(
+        { code: 400, message: "缺少 path 参数" },
+        { status: 400 }
+      );
+    }
+
+    // 2. 校验 workspace 归属
+    const [ws] = await db
+      .select({ id: workspaces.id, userId: workspaces.userId })
+      .from(workspaces)
+      .where(
+        and(eq(workspaces.id, workspaceId), eq(workspaces.userId, auth.userId))
+      )
+      .limit(1);
+
+    if (!ws) {
+      return Response.json(
+        { code: 404, message: "工作空间不存在或无权访问" },
+        { status: 404 }
+      );
+    }
+
+    // 3. 构建路径并双重越权校验
+    const dataRoot = getDataRoot();
+    const userRoot = path.resolve(dataRoot, "workspaces", `user_${auth.userId}`);
+    const workspaceRoot = path.resolve(userRoot, workspaceId);
+    let targetPath = path.resolve(workspaceRoot, dirPath);
+
+    // 兼容旧版工作空间
+    if (!fs.existsSync(workspaceRoot)) {
+      const legacyRoot = path.resolve(dataRoot, "workspaces", workspaceId);
+      if (fs.existsSync(legacyRoot)) {
+        targetPath = path.resolve(legacyRoot, dirPath);
+      }
+    }
+
+    // 双重校验
+    if (!targetPath.startsWith(workspaceRoot) && !targetPath.startsWith(path.resolve(dataRoot, "workspaces", workspaceId))) {
+      return Response.json(
+        { code: 403, message: "路径越权" },
+        { status: 403 }
+      );
+    }
+
+    if (fs.existsSync(targetPath)) {
+      return Response.json(
+        { code: 409, message: "目录已存在" },
+        { status: 409 }
+      );
+    }
+
+    fs.mkdirSync(targetPath, { recursive: true });
+
+    return Response.json({
+      code: 200,
+      message: "目录已创建",
+      data: { path: dirPath },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "未知错误";
+    return Response.json(
+      { code: 500, message: `创建目录失败: ${message}` },
+      { status: 500 }
+    );
+  }
+}
