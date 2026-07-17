@@ -77,12 +77,14 @@ function TimelineItem({
   isLast: boolean;
   isStreaming: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-
   const isRunning =
     step.state === "call" || step.state === "partial-call";
-  const isDone = !isRunning;
+
+  const [expanded, setExpanded] = useState(
+    // ★ 流式时自动展开所有步骤，让用户看到完整执行过程
+    isStreaming || isRunning
+  );
+  const [elapsed, setElapsed] = useState(0);
 
   // ★ 运行中的步骤：实时计时器
   useEffect(() => {
@@ -181,13 +183,7 @@ function TimelineItem({
       >
         {/* 头部：步骤类型 + 耗时 + Token */}
         <button
-          onClick={() =>
-            setExpanded(
-              (step.type !== "thought" || !!step.text) && step.type !== "tool-result"
-                ? !expanded
-                : expanded
-            )
-          }
+          onClick={() => setExpanded(!expanded)}
           className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-aura-hover/50 transition-colors rounded-t-lg"
         >
           {/* 类型标签 */}

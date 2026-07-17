@@ -9,6 +9,10 @@ import { FileMentionInput, type FileMentionInputHandle } from "@/components/agen
 import { DraggableSplitter } from "@/components/agent/DraggableSplitter";
 import { ModelSwitcher, type ModelConfigSafe } from "@/components/agent/ModelSwitcher";
 import { ModelConfigPanel } from "@/components/agent/ModelConfigPanel";
+import { SceneSelector } from "@/components/agent/SceneSelector";
+import { DbConnectionSelector } from "@/components/agent/DbConnectionSelector";
+import { DbConnectionPanel } from "@/components/agent/DbConnectionPanel";
+import type { SceneListItem, DbConnectionItem } from "@/lib/agent/scene-data";
 import { StepTimeline, type TimelineStep } from "@/components/agent/StepTimeline";
 import { UsageBadge } from "@/components/agent/UsageBadge";
 import { RunDetailPanel } from "@/components/agent/RunDetailPanel";
@@ -128,6 +132,14 @@ export default function AgentWorkbench() {
   const [modelConfigPanelOpen, setModelConfigPanelOpen] = useState(false);
   const [modelSwitchKey, setModelSwitchKey] = useState(0); // 用于刷新 ModelSwitcher
 
+  // ★ 场景与数据库连接
+  const [sceneSlug, setSceneSlug] = useState<string | null>(null);
+  const [activeScene, setActiveScene] = useState<SceneListItem | null>(null);
+  const [dbConnectionId, setDbConnectionId] = useState<string | null>(null);
+  const [selectedDbConn, setSelectedDbConn] = useState<DbConnectionItem | null>(null);
+  const [sceneSelectorOpen, setSceneSelectorOpen] = useState(false);
+  const [connectionPanelOpen, setConnectionPanelOpen] = useState(false);
+
   // 聊天
   const [clearToken, setClearToken] = useState(0);
   const mentionInputRef = useRef<FileMentionInputHandle>(null);
@@ -148,6 +160,10 @@ export default function AgentWorkbench() {
   modelConfigRef.current = selectedModelConfig;
   const chatIdRef = useRef(chatId);
   chatIdRef.current = chatId;
+  const sceneSlugRef = useRef(sceneSlug);
+  sceneSlugRef.current = sceneSlug;
+  const dbConnIdRef = useRef(dbConnectionId);
+  dbConnIdRef.current = dbConnectionId;
 
   // ★ 自动滚动
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -175,6 +191,12 @@ export default function AgentWorkbench() {
         }
         if (chatIdRef.current) {
           extra.chatId = chatIdRef.current;
+        }
+        if (sceneSlugRef.current) {
+          extra.sceneSlug = sceneSlugRef.current;
+        }
+        if (dbConnIdRef.current) {
+          extra.dbConnectionId = dbConnIdRef.current;
         }
         return extra;
       },
@@ -336,10 +358,41 @@ export default function AgentWorkbench() {
       chatIdRef.current = sessionId;
       if (title) setSessionTitle(title);
       try {
+        // 1. 加载历史消息
         const res = await fetch(
           `/api/workspaces/chat-messages?workspaceId=${workspaceId}&sessionId=${sessionId}`
         );
         const data = await res.json();
+
+        // 2. ★ 尝试加载该会话最新 Run 的完整步骤（含 thought + tool-call + tool-result）
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let runSteps: any[] = [];
+        try {
+          const runsRes = await fetch(
+            `/api/workspaces/runs?workspaceId=${workspaceId}&sessionId=${sessionId}&limit=1`
+          );
+          const runsData = await runsRes.json();
+          if (runsData.code === 200 && runsData.data?.runs?.length > 0) {
+            const runId = runsData.data.runs[0].id;
+            const detailRes = await fetch(`/api/workspaces/runs/${runId}`);
+            const detailData = await detailRes.json();
+            if (detailData.code === 200 && Array.isArray(detailData.data?.steps)) {
+              runSteps = detailData.data.steps;
+            }
+          }
+        } catch {
+          // 获取 steps 失败不阻塞消息加载
+        }
+
+        // 3. 将 run_steps 按 stepNumber 分组，方便查找
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const stepsByNumber = new Map<number, any[]>();
+        for (const s of runSteps) {
+          const existing = stepsByNumber.get(s.stepNumber) ?? [];
+          existing.push(s);
+          stepsByNumber.set(s.stepNumber, existing);
+        }
+
         if (data.code === 200 && Array.isArray(data.data)) {
           // 将 DB 历史消息转换为 AI SDK UIMessage 格式，注入 useChat
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -349,9 +402,74 @@ export default function AgentWorkbench() {
               { type: "text" as const, text: m.content ?? "" },
             ];
 
-            // ★ 将 DB 中的 toolCalls JSON 转换为 UI parts
-            // StepTimeline 通过这些 parts 渲染历史工具调用步骤
-            if (m.toolCalls && Array.isArray(m.toolCalls)) {
+            // ★ 优先用 run_steps 重建完整的步骤时间线（含 thought + tool-call + tool-result）
+            // 如果 runSteps 为空则回退到 chatMessages.toolCalls
+            if (m.role === "assistant" && runSteps.length > 0) {
+              // 按 stepNumber 排序后插入 reasoning / tool-invocation parts
+              const sortedStepNums = Array.from(stepsByNumber.keys()).sort(
+                (a, b) => a - b
+              );
+              for (const stepNum of sortedStepNums) {
+                const group = stepsByNumber.get(stepNum) ?? [];
+                // 每步可能包含 thought → tool-call → tool-result 三类记录
+                // 先插入 thought (reasoning part)
+                for (const step of group) {
+                  if (
+                    step.stepType === "thought" &&
+                    step.thought &&
+                    (step.thought as string).trim().length > 0
+                  ) {
+                    parts.push({
+                      type: "reasoning" as const,
+                      text: step.thought,
+                    });
+                  }
+                }
+                // 再插入 tool-call（合并 tool-result）
+                const toolCallsInStep = group.filter(
+                  (s: { stepType: string }) => s.stepType === "tool-call"
+                );
+                const toolResultsInStep = group.filter(
+                  (s: { stepType: string }) => s.stepType === "tool-result"
+                );
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                for (const tc of toolCallsInStep as any[]) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const matchingResult = toolResultsInStep.find(
+                    (tr: any) => tr.toolName === tc.toolName
+                  );
+                  parts.push({
+                    type: "tool-invocation" as const,
+                    toolInvocation: {
+                      toolName: tc.toolName ?? "unknown",
+                      args: tc.toolArgs ?? {},
+                      result: matchingResult?.toolResult ?? null,
+                      state: "result" as const,
+                    },
+                  });
+                }
+                // 孤立的 tool-result（没有对应 tool-call 的）也插入
+                for (const tr of toolResultsInStep) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const trAny = tr as any;
+                  const hasMatchingCall = toolCallsInStep.some(
+                    (tc: any) => tc.toolName === trAny.toolName
+                  );
+                  if (!hasMatchingCall) {
+                    parts.push({
+                      type: "tool-invocation" as const,
+                      toolInvocation: {
+                        toolName: trAny.toolName ?? "unknown",
+                        args: {},
+                        result: trAny.toolResult ?? null,
+                        state: "result" as const,
+                      },
+                    });
+                  }
+                }
+              }
+            } else if (m.toolCalls && Array.isArray(m.toolCalls)) {
+              // ★ 回退：用 DB 中的 toolCalls JSON
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               for (const tc of m.toolCalls as any[]) {
                 parts.push({
@@ -863,6 +981,38 @@ export default function AgentWorkbench() {
                 completionTokens={sessionTokens.completionTokens}
                 modelName={selectedModelConfig?.modelName}
               />
+
+              {/* 分隔 */}
+              <div className="w-px h-4 bg-aura-border" />
+
+              {/* ★ 场景选择按钮 */}
+              <button
+                onClick={() => setSceneSelectorOpen(true)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                  activeScene
+                    ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
+                    : "bg-aura-hover hover:bg-aura-border border border-aura-border text-aura-text-muted hover:text-aura-text"
+                }`}
+                title={activeScene ? `当前场景: ${activeScene.name}` : "选择专家场景"}
+              >
+                <span>{activeScene?.icon ?? "🎯"}</span>
+                <span className="truncate max-w-[80px]">
+                  {activeScene ? activeScene.name : "选择场景"}
+                </span>
+              </button>
+
+              {/* ★ DB 连接选择器（场景要求 DB 时显示） */}
+              {activeScene?.dbRequired && (
+                <DbConnectionSelector
+                  selectedConnectionId={dbConnectionId}
+                  onSelect={(conn) => {
+                    setDbConnectionId(conn?.id ?? null);
+                    setSelectedDbConn(conn);
+                  }}
+                  onOpenPanel={() => setConnectionPanelOpen(true)}
+                  disabled={!activeScene}
+                />
+              )}
             </div>
 
             {workspaceId && (
@@ -1070,6 +1220,51 @@ export default function AgentWorkbench() {
 
           {/* 输入区 */}
           <div className="p-4 border-t border-aura-border bg-aura-bg">
+            {/* ★ 场景 & DB 连接标签 */}
+            {(activeScene || selectedDbConn) && (
+              <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+                {activeScene && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                    <span>{activeScene.icon ?? "🔧"}</span>
+                    <span className="font-medium">{activeScene.name}</span>
+                    <button
+                      onClick={() => {
+                        setSceneSlug(null);
+                        setActiveScene(null);
+                        setDbConnectionId(null);
+                        setSelectedDbConn(null);
+                      }}
+                      className="ml-0.5 hover:text-emerald-200 transition-colors"
+                      title="清除场景"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+                {selectedDbConn && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                    <span>🔗</span>
+                    <span className="font-medium max-w-[120px] truncate">
+                      {selectedDbConn.label}
+                    </span>
+                    <span className="text-cyan-500/60">
+                      ({selectedDbConn.host}:{selectedDbConn.port})
+                    </span>
+                    <button
+                      onClick={() => {
+                        setDbConnectionId(null);
+                        setSelectedDbConn(null);
+                      }}
+                      className="ml-0.5 hover:text-cyan-200 transition-colors"
+                      title="清除连接"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="flex gap-2">
               <FileMentionInput
                 ref={mentionInputRef}
@@ -1109,6 +1304,31 @@ export default function AgentWorkbench() {
         open={modelConfigPanelOpen}
         onClose={() => setModelConfigPanelOpen(false)}
         onChanged={handleModelConfigChanged}
+      />
+
+      {/* ★ 场景选择器 */}
+      <SceneSelector
+        open={sceneSelectorOpen}
+        onClose={() => setSceneSelectorOpen(false)}
+        onSelect={(scene) => {
+          setSceneSlug(scene.slug);
+          setActiveScene(scene);
+          // 切换场景时清除之前的 DB 连接
+          if (!scene.dbRequired) {
+            setDbConnectionId(null);
+            setSelectedDbConn(null);
+          }
+        }}
+      />
+
+      {/* ★ DB 连接管理面板 */}
+      <DbConnectionPanel
+        open={connectionPanelOpen}
+        onClose={() => setConnectionPanelOpen(false)}
+        onChanged={() => {
+          // 通知 DbConnectionSelector 刷新
+          window.dispatchEvent(new CustomEvent("db-connections-changed"));
+        }}
       />
 
       {/* ==================== 查看全部会话模态框 ==================== */}

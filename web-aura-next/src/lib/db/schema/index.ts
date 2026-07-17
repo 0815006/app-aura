@@ -241,6 +241,74 @@ export const runSteps = pgTable(
 );
 
 // ============================================================
+// 7. 场景定义表 (scene_definitions) —— 场景驱动型智能体配置
+// ============================================================
+export const sceneDefinitions = pgTable(
+  "scene_definitions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    slug: varchar("slug", { length: 100 }).notNull().unique(),
+    name: varchar("name", { length: 200 }).notNull(),
+    description: text("description"),
+    icon: varchar("icon", { length: 50 }).default("🔧"),
+    systemPrompt: text("system_prompt").notNull(),
+    toolWhitelist: jsonb("tool_whitelist").default([]),
+    requiredInputs: jsonb("required_inputs").default([]),
+    dbRequired: boolean("db_required").default(false),
+    sortOrder: integer("sort_order").default(0),
+    status: varchar("status", { length: 20 }).default("active"),
+    createTime: timestamp("create_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updateTime: timestamp("update_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    statusIdx: index("idx_scenes_status").on(table.status, table.sortOrder),
+  })
+);
+
+// ============================================================
+// 8. 数据库连接配置表 (db_connections) —— 用户 DB 连接存储
+// ============================================================
+export const dbConnections = pgTable(
+  "db_connections",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    label: varchar("label", { length: 200 }).notNull(),
+    dbType: varchar("db_type", { length: 50 }).notNull().default("postgresql"),
+    host: varchar("host", { length: 255 }).notNull(),
+    port: integer("port").notNull(),
+    dbName: varchar("db_name", { length: 255 }).notNull(),
+    username: varchar("username", { length: 255 }).notNull(),
+    passwordEncrypted: text("password_encrypted").notNull(),
+    sslMode: varchar("ssl_mode", { length: 50 }).default("prefer"),
+    extraArgs: jsonb("extra_args").default({}),
+    lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
+    testResult: varchar("test_result", { length: 20 }),
+    testMessage: text("test_message"),
+    status: varchar("status", { length: 20 }).default("active"),
+    createTime: timestamp("create_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updateTime: timestamp("update_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userIdx: index("idx_db_conn_user").on(table.userId, table.status),
+    uniqueLabel: uniqueIndex("uidx_db_conn_label").on(
+      table.userId,
+      table.label
+    ),
+  })
+);
+
+// ============================================================
 // 6. 工作空间记忆表 (workspace_memories) —— 长期记忆/上下文存储
 // ============================================================
 export const memoryCategoryEnum = pgEnum("memory_category", [

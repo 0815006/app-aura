@@ -8,6 +8,8 @@ import {
   workspaceRuns,
   runSteps,
   workspaceMemories,
+  sceneDefinitions,
+  dbConnections,
 } from "@/lib/db/schema";
 import { ensureDataDirs, isServerMode, getWorkspaceRootForUser } from "@/lib/env";
 import { getAuthenticatedUser } from "@/lib/auth";
@@ -28,6 +30,12 @@ import {
   webSearch,
   httpRequest,
   updateMemory,
+  // DB 专项工具
+  dbExecuteQuery,
+  dbGetQueryPlan,
+  dbGetTableSchema,
+  dbListSlowQueries,
+  releaseAllPools,
 } from "@/lib/agent/tools";
 
 /**
@@ -71,6 +79,14 @@ const auraTools = {
 
   // 五、工作空间记忆管理
   updateMemory,
+};
+
+// 场景专属 DB 工具集
+const sceneDbTools = {
+  dbExecuteQuery,
+  dbGetQueryPlan,
+  dbGetTableSchema,
+  dbListSlowQueries,
 };
 
 // ============================================================
@@ -142,6 +158,10 @@ export async function POST(req: Request) {
     const sessionId: string = body.sessionId ?? body.chatId ?? "default";
     const workspaceId: string | null = body.workspaceId ?? null;
     const selectedConfigId: string | null = body.modelConfigId ?? null;
+
+    // ★ 场景与数据库连接
+    const sceneSlug: string | null = body.sceneSlug ?? null;
+    const dbConnectionId: string | null = body.dbConnectionId ?? null;
 
     // ReAct 最大工具调用步数（防止无限循环消耗 Token）
     const maxSteps: number = body.maxSteps ?? 15;
@@ -296,6 +316,72 @@ export async function POST(req: Request) {
     }
 
     // ============================================================
+    // ★ 场景感知：加载场景配置 + DB 连接信息
+    // ============================================================
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let sceneConfig: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let dbConnConfig: any = null;
+    let hasDbTools = false;
+
+    if (sceneSlug) {
+      try {
+        sceneConfig = await db.query.sceneDefinitions.findFirst({
+          where: and(
+            eq(sceneDefinitions.slug, sceneSlug),
+            eq(sceneDefinitions.status, "active")
+          ),
+        });
+
+        if (!sceneConfig) {
+          console.warn(`[Aura Chat] ⚠️ 场景不存在或已停用: ${sceneSlug}`);
+        } else {
+          // 追加场景 System Prompt
+          systemPrompt +=
+            `\n\n【当前场景】${sceneConfig.name}\n\n【场景规则】\n${sceneConfig.systemPrompt}`;
+
+          // 如果场景需要数据库连接
+          if (sceneConfig.dbRequired && dbConnectionId) {
+            try {
+              dbConnConfig = await db.query.dbConnections.findFirst({
+                where: and(
+                  eq(dbConnections.id, dbConnectionId),
+                  eq(dbConnections.status, "active")
+                ),
+              });
+
+              if (dbConnConfig) {
+                // 注入 DB 连接信息到 System Prompt
+                systemPrompt +=
+                  `\n\n【数据库连接信息】\n- 类型: ${dbConnConfig.dbType === "postgresql" ? "PostgreSQL" : "MySQL"}\n` +
+                  `- 主机: ${dbConnConfig.host}:${dbConnConfig.port}\n` +
+                  `- 数据库: ${dbConnConfig.dbName}\n` +
+                  `- 用户: ${dbConnConfig.username}\n` +
+                  `（密码已加密，你通过 db_* 工具透明使用该连接即可，无需处理凭证）`;
+
+                hasDbTools = true;
+                console.log(
+                  `[Aura Chat] 场景 "${sceneConfig.name}" + DB 连接 "${dbConnConfig.label}" 已就绪`
+                );
+              } else {
+                console.warn(
+                  `[Aura Chat] ⚠️ 场景要求 DB 连接，但指定的连接 ${dbConnectionId} 不存在`
+                );
+              }
+            } catch (dbErr) {
+              console.error("[Aura Chat] 加载 DB 连接失败:", dbErr);
+            }
+          }
+
+          console.log(`[Aura Chat] 场景已加载: ${sceneConfig.name} (slug=${sceneSlug})`);
+        }
+      } catch (sceneErr) {
+        console.error("[Aura Chat] 加载场景失败:", sceneErr);
+      }
+    }
+
+    // ============================================================
     // 4. 流式对话
     // ============================================================
 
@@ -303,8 +389,16 @@ export async function POST(req: Request) {
     const toolCtx: ToolContext = {
       userId: activeUserId,
       workspaceId,
+      sceneSlug: sceneSlug ?? undefined,
+      dbConnectionId: dbConnectionId ?? undefined,
     };
     setToolContext(toolCtx);
+
+    // ★ 动态工具挂载：场景需要 DB 时合并 DB 工具
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const activeTools: any = hasDbTools
+      ? { ...auraTools, ...sceneDbTools }
+      : auraTools;
 
     // ★ 步骤计时器 & 用量追踪（跨 onStepFinish / onFinish 共享）
     let stepStartTime = Date.now();
@@ -321,7 +415,7 @@ export async function POST(req: Request) {
       system: systemPrompt,
       messages: aiMessages,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tools: auraTools as any,
+      tools: activeTools as any,
       // ★ 自动选择：模型自主决定何时调用工具、何时输出文字
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       toolChoice: "auto" as any,
@@ -370,6 +464,13 @@ export async function POST(req: Request) {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       onFinish: async (event: any) => {
+        // ★ 释放 DB 连接池（必须在清理上下文之前）
+        if (hasDbTools) {
+          releaseAllPools().catch((err) => {
+            console.error("[Aura Chat] 释放 DB 连接池失败:", err);
+          });
+        }
+
         // ★ 工具执行完毕后清理上下文
         clearToolContext();
 

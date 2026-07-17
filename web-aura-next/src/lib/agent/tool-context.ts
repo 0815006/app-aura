@@ -13,6 +13,8 @@ import { resolveSafePath, getDataRoot, isClientMode } from "@/lib/env";
 export interface ToolContext {
   userId: number | null;
   workspaceId: string | null;
+  sceneSlug?: string;
+  dbConnectionId?: string;
 }
 
 const CTX_KEY = "__aura_tool_ctx__";
