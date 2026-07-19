@@ -1,4 +1,5 @@
 import { CapabilitiesSection } from "@/components/agent/CapabilitiesSection";
+import { ScenesSection } from "@/components/agent/ScenesSection";
 import { ToolsSection } from "@/components/agent/ToolsSection";
 
 export default function CapabilitiesPage() {
@@ -24,6 +25,18 @@ export default function CapabilitiesPage() {
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-10">
         {/* 上半部分：智能体能力 */}
         <CapabilitiesSection />
+
+        {/* 分隔线 */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-aura-border" />
+          <span className="text-xs text-aura-text-dim flex-shrink-0">
+            场景定义角色 · 工具赋予能力
+          </span>
+          <div className="flex-1 h-px bg-aura-border" />
+        </div>
+
+        {/* 中部：专家场景 */}
+        <ScenesSection />
 
         {/* 分隔线 */}
         <div className="flex items-center gap-3">

@@ -11,6 +11,7 @@ export interface SceneListItem {
   dbRequired: boolean | null;
   requiredInputs: SceneInput[];
   sortOrder: number | null;
+  status: string | null;
 }
 
 export interface SceneDetail extends SceneListItem {

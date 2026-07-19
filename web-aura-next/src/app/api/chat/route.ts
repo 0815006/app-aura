@@ -10,6 +10,7 @@ import {
   workspaceMemories,
   sceneDefinitions,
   dbConnections,
+  workspaces,
 } from "@/lib/db/schema";
 import { ensureDataDirs, isServerMode, getWorkspaceRootForUser } from "@/lib/env";
 import { getAuthenticatedUser } from "@/lib/auth";
@@ -17,7 +18,7 @@ import { decrypt } from "@/lib/auth/crypto";
 import { setToolContext, clearToolContext } from "@/lib/agent/tool-context";
 import type { ToolContext } from "@/lib/agent/tool-context";
 import { extractAndSaveMemories } from "@/lib/agent/memory-extractor";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte } from "drizzle-orm";
 
 import {
   listDirectory,
@@ -30,6 +31,9 @@ import {
   webSearch,
   httpRequest,
   updateMemory,
+  // UI 专项工具
+  executePlaywrightValidation,
+  saveUiAuditReport,
   // DB 专项工具
   dbExecuteQuery,
   dbGetQueryPlan,
@@ -87,6 +91,12 @@ const sceneDbTools = {
   dbGetQueryPlan,
   dbGetTableSchema,
   dbListSlowQueries,
+};
+
+// 场景专属 UI 工具集（UI 原型契约与自动化校验专家）
+const sceneUiTools = {
+  executePlaywrightValidation,
+  saveUiAuditReport,
 };
 
 // ============================================================
@@ -164,7 +174,9 @@ export async function POST(req: Request) {
     const dbConnectionId: string | null = body.dbConnectionId ?? null;
 
     // ReAct 最大工具调用步数（防止无限循环消耗 Token）
-    const maxSteps: number = body.maxSteps ?? 15;
+    // ★ 配额熔断：maxSteps 硬上限 20 步，前端传入超过此值自动截断
+    const MAX_STEPS_HARD = parseInt(process.env.AURA_MAX_STEPS_HARD ?? "20", 10);
+    const maxSteps: number = Math.min(body.maxSteps ?? 15, MAX_STEPS_HARD);
 
     console.log(
       `[Aura Chat] ${rawMessages.length} 条消息, prompt: "${prompt.slice(0, 80)}", workspaceId=${workspaceId ?? "(无)"}`
@@ -253,6 +265,71 @@ export async function POST(req: Request) {
     });
 
     // ============================================================
+    // ★ 配额熔断：每日 Token 消耗检查
+    // ============================================================
+
+    const DEFAULT_TOKEN_LIMIT = parseInt(
+      process.env.AURA_DAILY_TOKEN_LIMIT ?? "500000",
+      10
+    );
+    let dailyUsageRatio = 0;
+    let effectiveDailyLimit = DEFAULT_TOKEN_LIMIT;
+
+    if (workspaceId) {
+      try {
+        // 读取工作空间自定义配额（如有）
+        const ws = await db.query.workspaces.findFirst({
+          where: eq(workspaces.id, workspaceId),
+          columns: { dailyTokenLimit: true },
+        });
+        if (ws?.dailyTokenLimit != null && ws.dailyTokenLimit > 0) {
+          effectiveDailyLimit = ws.dailyTokenLimit;
+        }
+
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const todayRuns = await db.query.workspaceRuns.findMany({
+          where: and(
+            eq(workspaceRuns.workspaceId, workspaceId),
+            gte(workspaceRuns.createTime, todayStart)
+          ),
+          columns: { totalTokens: true },
+        });
+
+        const todayTotal = todayRuns.reduce(
+          (sum, r) => sum + (r.totalTokens ?? 0),
+          0
+        );
+        dailyUsageRatio = todayTotal / effectiveDailyLimit;
+
+        console.log(
+          `[Aura Chat] 今日 Token: ${todayTotal.toLocaleString()} / ${effectiveDailyLimit.toLocaleString()} (${Math.round(dailyUsageRatio * 100)}%)` +
+          (ws?.dailyTokenLimit ? " [工作空间自定义]" : " [全局默认]")
+        );
+
+        // 100%：硬阻断
+        if (todayTotal >= effectiveDailyLimit) {
+          return Response.json(
+            {
+              code: 429,
+              message: `今日 Token 配额已用尽（${effectiveDailyLimit.toLocaleString()}）。你可以增加工作空间配额后继续使用，或等待明天自动重置。`,
+              quota: {
+                limit: effectiveDailyLimit,
+                used: todayTotal,
+                remaining: 0,
+              },
+            },
+            { status: 429 }
+          );
+        }
+      } catch (quotaErr) {
+        // 配额检查失败时不阻塞正常请求（fail-open）
+        console.error("[Aura Chat] 配额检查失败（放行）:", quotaErr);
+      }
+    }
+
+    // ============================================================
     // 3. 构建 system prompt
     // ============================================================
 
@@ -324,6 +401,7 @@ export async function POST(req: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let dbConnConfig: any = null;
     let hasDbTools = false;
+    let hasUiTools = false;
 
     if (sceneSlug) {
       try {
@@ -375,10 +453,29 @@ export async function POST(req: Request) {
           }
 
           console.log(`[Aura Chat] 场景已加载: ${sceneConfig.name} (slug=${sceneSlug})`);
+
+          // 如果场景是 UI 原型契约校验专家，挂载 UI 专属工具
+          if (sceneSlug === "bank-ui-validator") {
+            hasUiTools = true;
+            console.log(
+              `[Aura Chat] UI 校验场景 — 已挂载 Playwright + 审计报告工具`
+            );
+          }
         }
       } catch (sceneErr) {
         console.error("[Aura Chat] 加载场景失败:", sceneErr);
       }
+    }
+
+    // ★ 配额提醒：用量超 80% 时注入 System Prompt，让 AI 自动精简
+    if (dailyUsageRatio >= 0.95) {
+      const remaining = effectiveDailyLimit * (1 - dailyUsageRatio);
+      systemPrompt +=
+        `\n\n⚠️⚠️⚠️ 【Token 配额紧急警告】今日配额已使用 ${Math.round(dailyUsageRatio * 100)}%，仅剩 ${Math.round(remaining).toLocaleString()} tokens。请极度精简回复，跳过非必要步骤，直接给出关键结论。`;
+    } else if (dailyUsageRatio >= 0.8) {
+      const remaining = effectiveDailyLimit * (1 - dailyUsageRatio);
+      systemPrompt +=
+        `\n\n⚠️ 【Token 配额提醒】今日配额已使用 ${Math.round(dailyUsageRatio * 100)}%，剩余 ${Math.round(remaining).toLocaleString()} tokens。请精简回复，减少不必要的探索性工具调用。`;
     }
 
     // ============================================================
@@ -394,11 +491,15 @@ export async function POST(req: Request) {
     };
     setToolContext(toolCtx);
 
-    // ★ 动态工具挂载：场景需要 DB 时合并 DB 工具
+    // ★ 动态工具挂载：按场景类型合并专属工具
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const activeTools: any = hasDbTools
-      ? { ...auraTools, ...sceneDbTools }
-      : auraTools;
+    let activeTools: any = auraTools;
+    if (hasDbTools) {
+      activeTools = { ...activeTools, ...sceneDbTools };
+    }
+    if (hasUiTools) {
+      activeTools = { ...activeTools, ...sceneUiTools };
+    }
 
     // ★ 步骤计时器 & 用量追踪（跨 onStepFinish / onFinish 共享）
     let stepStartTime = Date.now();

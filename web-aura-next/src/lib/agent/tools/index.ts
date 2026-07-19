@@ -34,6 +34,10 @@ export { webSearch } from "./web-search";
 export { httpRequest } from "./http-request";
 export { updateMemory } from "./update-memory";
 
+// UI 专项工具（场景：UI 原型契约与自动化校验专家）
+export { executePlaywrightValidation } from "./execute-playwright-validation";
+export { saveUiAuditReport } from "./save-ui-audit-report";
+
 // DB 专项工具（场景：数据库诊断专家）
 export { dbExecuteQuery } from "./db/db-execute-query";
 export { dbGetQueryPlan } from "./db/db-get-query-plan";

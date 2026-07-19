@@ -1,14 +1,14 @@
 /**
  * GET /api/scenes — 获取可用场景列表
  *
- * 仅返回 status = 'active' 的场景，按 sort_order 升序排列。
+ * 返回 status = 'active' 或 'planned' 的场景，按 sort_order 升序排列。
  * 不返回 system_prompt（仅在选择具体场景时返回）。
  *
  * 首次访问时自动初始化场景种子数据。
  */
 import { db } from "@/lib/db/client";
 import { sceneDefinitions } from "@/lib/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { inArray, asc } from "drizzle-orm";
 import { seedScenes } from "@/lib/db/seed/scenes";
 
 let seedInitialized = false;
@@ -24,7 +24,7 @@ export async function GET() {
 
   try {
     const scenes = await db.query.sceneDefinitions.findMany({
-      where: eq(sceneDefinitions.status, "active"),
+      where: inArray(sceneDefinitions.status, ["active", "planned"]),
       orderBy: asc(sceneDefinitions.sortOrder),
       columns: {
         id: true,
@@ -35,6 +35,7 @@ export async function GET() {
         dbRequired: true,
         requiredInputs: true,
         sortOrder: true,
+        status: true,
       },
     });
 

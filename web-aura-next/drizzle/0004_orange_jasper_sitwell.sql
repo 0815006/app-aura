@@ -1,0 +1,1 @@
+ALTER TABLE "workspaces" ADD COLUMN "daily_token_limit" integer;

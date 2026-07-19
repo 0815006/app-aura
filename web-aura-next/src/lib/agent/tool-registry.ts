@@ -10,7 +10,9 @@ export type ToolCategory =
   | "asset-output"
   | "sandbox-compute"
   | "external-connect"
-  | "memory";
+  | "browser-automation"
+  | "memory"
+  | "db-diagnostic";
 
 export interface ToolParam {
   name: string;
@@ -39,6 +41,8 @@ export const TOOL_CATEGORIES: Record<
   "sandbox-compute": { label: "沙箱计算", icon: "🧮" },
   "external-connect": { label: "外部连接", icon: "🌐" },
   memory: { label: "记忆管理", icon: "🧠" },
+  "browser-automation": { label: "浏览器自动化", icon: "🌐" },
+  "db-diagnostic": { label: "数据库诊断", icon: "🗄️" },
 };
 
 export const AGENT_TOOLS: ToolMeta[] = [
@@ -275,7 +279,71 @@ export const AGENT_TOOLS: ToolMeta[] = [
   },
 
   // ============================================================
-  // 五、记忆管理类（Memory）
+  // 五、浏览器自动化类（Browser Automation）—— 场景专属
+  // ============================================================
+  {
+    name: "execute_playwright_validation",
+    displayName: "Playwright DOM 抓取器",
+    description:
+      "驱动服务器端无头浏览器（Chromium），注入登录态参数，跳转到目标系统页面抓取 DOM 结构与可见文本。支持 Cookie 注入/表单登录/无鉴权三种模式。用于 UI 原型契约校验场景。",
+    category: "browser-automation",
+    categoryIcon: "🌐",
+    sourceFile: "src/lib/agent/tools/execute-playwright-validation.ts",
+    registered: true,
+    parameters: [
+      {
+        name: "targetUrl",
+        type: "string",
+        required: true,
+        description: "目标系统页面的完整 URL",
+      },
+      {
+        name: "authConfig",
+        type: "object",
+        required: false,
+        description: "鉴权配置（COOKIE_INJECTION / FORM_LOGIN / NONE）",
+      },
+      {
+        name: "waitForSelector",
+        type: "string",
+        required: false,
+        description: "等待某个 CSS 选择器出现后再开始抓取（SPA 异步渲染）",
+      },
+    ],
+  },
+  {
+    name: "save_ui_audit_report",
+    displayName: "UI 审计报告生成器",
+    description:
+      "将原型契约要求与实际抓取的页面文本进行对比，生成银行合规审计报告（Markdown + JSON），固化到工作空间 outputs/ui-test/ 目录。",
+    category: "asset-output",
+    categoryIcon: "✏️",
+    sourceFile: "src/lib/agent/tools/save-ui-audit-report.ts",
+    registered: true,
+    parameters: [
+      {
+        name: "reportTitle",
+        type: "string",
+        required: true,
+        description: "审计报告标题",
+      },
+      {
+        name: "textElements",
+        type: "array",
+        required: true,
+        description: "文本要素比对清单（expectedText + status + severity）",
+      },
+      {
+        name: "overallVerdict",
+        type: "enum",
+        required: true,
+        description: "整体审计结论（PASSED / FAILED / WARNING）",
+      },
+    ],
+  },
+
+  // ============================================================
+  // 六、记忆管理类（Memory）
   // ============================================================
   {
     name: "update_memory",
@@ -317,6 +385,88 @@ export const AGENT_TOOLS: ToolMeta[] = [
         type: "enum",
         required: false,
         description: "操作类型：set（默认）| delete",
+      },
+    ],
+  },
+
+  // ============================================================
+  // 七、数据库诊断类（DB Diagnostic）—— 场景专属
+  // ============================================================
+  {
+    name: "db_list_slow_queries",
+    displayName: "慢查询抓取器",
+    description:
+      "从 PostgreSQL pg_stat_statements 或 MySQL performance_schema 中获取最近执行最慢的 SQL 查询列表。需要数据库已开启相关扩展。",
+    category: "db-diagnostic",
+    categoryIcon: "🗄️",
+    sourceFile: "src/lib/agent/tools/db/db-list-slow-queries.ts",
+    registered: true,
+    parameters: [
+      {
+        name: "limit",
+        type: "number",
+        required: false,
+        description: "返回条数（默认 10，最大 50）",
+      },
+    ],
+  },
+  {
+    name: "db_get_query_plan",
+    displayName: "执行计划分析器",
+    description:
+      "获取 SQL 语句的 EXPLAIN 执行计划（JSON 格式），自动拼接 ANALYZE + BUFFERS。对写操作自动包裹 ROLLBACK 事务保护，防止误修改数据。",
+    category: "db-diagnostic",
+    categoryIcon: "🗄️",
+    sourceFile: "src/lib/agent/tools/db/db-get-query-plan.ts",
+    registered: true,
+    parameters: [
+      {
+        name: "sql",
+        type: "string",
+        required: true,
+        description: "需要分析的 SQL 语句",
+      },
+      {
+        name: "analyze",
+        type: "boolean",
+        required: false,
+        description: "是否使用 ANALYZE 实际执行（默认 true，写操作自动 ROLLBACK 保护）",
+      },
+    ],
+  },
+  {
+    name: "db_get_table_schema",
+    displayName: "表结构探查器",
+    description:
+      "获取指定表的结构信息：字段名、类型、是否可空、默认值，以及当前已有索引的名称、字段和类型。支持 schema.table 格式。",
+    category: "db-diagnostic",
+    categoryIcon: "🗄️",
+    sourceFile: "src/lib/agent/tools/db/db-get-table-schema.ts",
+    registered: true,
+    parameters: [
+      {
+        name: "table_name",
+        type: "string",
+        required: true,
+        description: "表名（支持 schema.table 格式，如 public.orders）",
+      },
+    ],
+  },
+  {
+    name: "db_execute_query",
+    displayName: "只读查询执行器",
+    description:
+      "在已连接数据库中执行只读 SQL（仅允许 SELECT/SHOW/DESCRIBE/EXPLAIN/WITH），后端强制拦截写操作。最多返回 1000 行，查询超时 30 秒。",
+    category: "db-diagnostic",
+    categoryIcon: "🗄️",
+    sourceFile: "src/lib/agent/tools/db/db-execute-query.ts",
+    registered: true,
+    parameters: [
+      {
+        name: "sql",
+        type: "string",
+        required: true,
+        description: "只读 SQL 语句（仅允许 SELECT/SHOW/DESCRIBE/EXPLAIN/WITH）",
       },
     ],
   },

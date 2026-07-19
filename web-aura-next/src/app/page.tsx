@@ -12,6 +12,7 @@ import { ModelConfigPanel } from "@/components/agent/ModelConfigPanel";
 import { SceneSelector } from "@/components/agent/SceneSelector";
 import { DbConnectionSelector } from "@/components/agent/DbConnectionSelector";
 import { DbConnectionPanel } from "@/components/agent/DbConnectionPanel";
+import { QuotaPopover } from "@/components/agent/QuotaPopover";
 import type { SceneListItem, DbConnectionItem } from "@/lib/agent/scene-data";
 import { StepTimeline, type TimelineStep } from "@/components/agent/StepTimeline";
 import { UsageBadge } from "@/components/agent/UsageBadge";
@@ -1016,9 +1017,10 @@ export default function AgentWorkbench() {
             </div>
 
             {workspaceId && (
-              <span className="text-[10px] text-aura-text-muted truncate max-w-[40%]">
-                WS: {workspaceId.slice(0, 8)}...
-              </span>
+              <QuotaPopover
+                workspaceId={workspaceId}
+                workspaceLabel={`WS: ${workspaceId.slice(0, 8)}...`}
+              />
             )}
           </div>
 

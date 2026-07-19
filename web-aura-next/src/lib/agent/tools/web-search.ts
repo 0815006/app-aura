@@ -1,11 +1,15 @@
 /**
  * 实时联网搜索 —— web_search
  *
- * 调用搜索引擎 API（Bing Search API v7），返回前 N 条结果摘要。
- * 通过环境变量 BING_SEARCH_API_KEY 配置。
+ * 调用 Bing Search API v7，返回前 N 条结果摘要。
+ * API Key 优先级：用户设置 > 环境变量 BING_SEARCH_API_KEY。
  */
 import { tool } from "ai";
 import { z } from "zod/v4";
+import { getToolContext } from "@/lib/agent/tool-context";
+import { db } from "@/lib/db/client";
+import { userSettings } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 
 const SEARCH_TIMEOUT_MS = 10_000;
 
@@ -31,14 +35,32 @@ export const webSearch = tool({
     count?: number;
   }): Promise<string> => {
     try {
-      const apiKey = process.env.BING_SEARCH_API_KEY;
+      // ★ 优先读取用户级 Key，否则回退到环境变量
+      let apiKey = process.env.BING_SEARCH_API_KEY ?? "";
+      const ctx = getToolContext();
+      if (ctx?.userId) {
+        try {
+          const row = await db.query.userSettings.findFirst({
+            where: and(
+              eq(userSettings.userId, ctx.userId),
+              eq(userSettings.key, "bing_search_api_key")
+            ),
+          });
+          if (row?.value) {
+            apiKey = row.value;
+          }
+        } catch {
+          // 查询失败时静默回退到 env
+        }
+      }
+
       if (!apiKey) {
         return JSON.stringify({
           status: "warning",
           query,
           results: [],
           error:
-            "未配置 BING_SEARCH_API_KEY 环境变量，无法执行联网搜索。请配置后重试。",
+            "未配置联网搜索 API Key。请在系统设置中填入你的 Bing Search API Key，或由管理员配置 BING_SEARCH_API_KEY 环境变量。",
         });
       }
 

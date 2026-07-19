@@ -12,6 +12,7 @@ import {
   integer,
   boolean,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 // ============================================================
@@ -48,7 +49,29 @@ export const users = pgTable("users", {
 });
 
 // ============================================================
-// 0.5. 用户模型配置表 (user_model_configs)
+// 0.5. 用户设置表 (user_settings)
+// key-value 模式，存储用户级可配置项（联网搜索 Key、默认配额等）。
+// 表中无记录时回退到环境变量全局默认。
+// ============================================================
+export const userSettings = pgTable(
+  "user_settings",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    key: varchar("key", { length: 100 }).notNull(),
+    value: text("value").notNull(),
+    updateTime: timestamp("update_time", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.key] }),
+  })
+);
+
+// ============================================================
+// 0.6. 用户模型配置表 (user_model_configs)
 // 每个用户可配置多个模型（DeepSeek / OpenAI 等），
 // api_key 使用 AES-256-GCM 加密存储。
 // ============================================================
@@ -92,6 +115,7 @@ export const workspaces = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     contextSnapshot: jsonb("context_snapshot"),
+    dailyTokenLimit: integer("daily_token_limit"),
     status: workspaceStatusEnum("status").default("active").notNull(),
     createTime: timestamp("create_time", { withTimezone: true })
       .defaultNow()

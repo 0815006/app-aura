@@ -167,10 +167,34 @@ export const CAPABILITIES: CapabilityItem[] = [
     status: "done",
     icon: "🪙",
   },
+  {
+    id: "scene-driven-agent",
+    name: "场景驱动型智能体",
+    description: "通过 System Prompt + 工具组合动态切换 Agent 专家角色，一平台多用",
+    details:
+      "已上线 7 个专家场景：数据库慢 SQL 诊断（配 4 个 DB 专属工具）、系统性能分析、需求分析与架构拆解、功能点估算、测试分析（银行级用例生成 + 造数规则导出）、UI 原型契约与自动化校验（Playwright 无头浏览器 DOM 抓取 + 语义比对审计）等。选择场景后自动注入角色 Prompt + 挂载专属工具，切换场景即切换 AI 能力。纯文件驱动场景无需新工具，换个 Prompt 即上线。场景间支持上下游联动——测试分析专家可直接消费功能点估算专家的 JSON 产出。",
+    layer: 2,
+    layerName: "通用基础能力",
+    sdkFeature: "tools + System Prompt 动态注入",
+    status: "done",
+    icon: "🎭",
+  },
 
   // ============================================================
-  // L3: 高阶增强能力 (3 项)
+  // L3: 高阶增强能力 (5 项)
   // ============================================================
+  {
+    id: "semantic-search",
+    name: "语义知识检索 (RAG)",
+    description: "基于 pgvector 向量相似度搜索，从工作空间知识库中精确召回相关上下文",
+    details:
+      "agent_knowledge 表已建（含 vector(1536) 嵌入列），pgvector 扩展已启用。待实现：(1) 文件变更自动分块 + embedMany 生成向量写入；(2) search_knowledge_base 工具供 Agent 在工作空间中做语义检索。目标：大项目/长日志超越 Context 限制时，精确召回最相关的 3-5 块内容。",
+    layer: 3,
+    layerName: "高阶增强能力",
+    sdkFeature: "embed / embedMany",
+    status: "planned",
+    icon: "🔍",
+  },
   {
     id: "progressive-preview",
     name: "渐进式实时预览",
@@ -196,6 +220,18 @@ export const CAPABILITIES: CapabilityItem[] = [
     icon: "🛡️",
   },
   {
+    id: "tool-routing",
+    name: "动态工具剪裁",
+    description: "按场景自动精简可用工具集，防止工具过载（Tool Bloat）影响模型决策准确率",
+    details:
+      "场景定义表中 tool_whitelist 字段已就绪。当前已实现按场景动态挂载专属工具（如 DB 场景自动加载 4 个数据库工具），但白名单运行时过滤未启用。启用后：选择需求分析场景 → 自动移除 DB 工具，仅保留文件读写 + 需求分析相关工具，减少 Token 浪费和工具选择错误率。",
+    layer: 3,
+    layerName: "高阶增强能力",
+    sdkFeature: "tools 动态合并",
+    status: "planned",
+    icon: "✂️",
+  },
+  {
     id: "multimodal-debug",
     name: "多模态视觉调试",
     description: "Agent 自主截图并通过视觉能力对比排查 UI 问题",
@@ -209,17 +245,17 @@ export const CAPABILITIES: CapabilityItem[] = [
   },
 
   // ============================================================
-  // L4: 外部配套能力 (4 项)
+  // L4: 外部配套能力 (5 项)
   // ============================================================
   {
     id: "sandbox",
     name: "物理安全沙箱",
-    description: "工具执行限制在工作空间目录内，防止越权访问与路径穿越",
+    description: "工具执行限制在工作空间目录内，路径守卫防止越权访问",
     details:
-      "所有文件读写和命令执行工具在调用前校验目标路径，确保不超出当前工作空间根路径（路径守卫）。长远方案为每个工作空间分配 Docker 容器或 WASM 沙箱，实现物理级别隔离。",
+      "所有文件读写和命令执行工具在执行前通过 resolveWorkspaceAwarePath 校验目标路径，确保不超出当前工作空间根路径。越权操作直接抛出异常并记录日志。长远方案为每个工作空间分配 Docker 容器实现物理级别隔离。",
     layer: 4,
     layerName: "外部配套能力",
-    status: "wip",
+    status: "done",
     icon: "🔒",
   },
   {
@@ -236,24 +272,46 @@ export const CAPABILITIES: CapabilityItem[] = [
   {
     id: "long-memory",
     name: "工作空间长期记忆",
-    description: "Agent 可主动写入记忆，下次对话自动注入作为背景知识",
+    description: "Agent 主动写入记忆，下次对话自动注入 System Prompt",
     details:
-      "Agent 通过 update_memory 工具在工作空间中记录关键发现（技术栈、用户偏好、项目约定等）。System prompt 自动注入重要性排序后的记忆列表。后续计划引入 pgvector 语义检索实现更深层的记忆召回。",
+      "完整闭环：Agent 通过 update_memory 工具写入 workspace_memories 表 → 下次对话自动按重要性排序注入 System Prompt → onFinish 触发记忆自动提取。支持 set/delete 操作，按 category 分类（技术栈、用户偏好、项目约定等）。后续规划引入 pgvector 语义检索。",
     layer: 4,
     layerName: "外部配套能力",
-    status: "wip",
+    status: "done",
     icon: "🧩",
   },
   {
     id: "quota-limiter",
     name: "动态配额熔断",
-    description: "限制单次任务最大步数、每小时 Token 消耗和费用上限",
+    description: "maxSteps 硬上限 + 每日 Token 分级管控 + 工作空间自助调额",
     details:
-      "防止 maxSteps 死循环或恶意 Prompt 注入导致账单爆炸。当前已限制单次任务最多 15 步。后续需增加「每工作空间每小时 Token 上限」和「每日费用上限」的硬熔断机制。",
+      "四层防护：(1) maxSteps 硬截断为 20 步；(2) 每日 Token 配额检查（默认 50 万/工作空间），超标返回 429；(3) 用量达 80% 时 System Prompt 注入提醒让 AI 自动精简；(4) 用户可调用 PATCH /api/workspaces/quota 自助调高工作空间配额（上限 500 万/天），配额次日 0 点自动重置。",
+    layer: 4,
+    layerName: "外部配套能力",
+    status: "done",
+    icon: "🚦",
+  },
+  {
+    id: "domain-toolkit",
+    name: "领域工具包架构",
+    description: "支持按场景插拔专属工具，一套底座承载无限专业领域",
+    details:
+      "已实现首个领域工具包：数据库诊断 4 件套（db_list_slow_queries / db_get_query_plan / db_get_table_schema / db_execute_query），选择 DB 诊断场景时自动挂载。后续规划：性能日志解析器（parse_performance_log）、DOCX 模板渲染器（render_docx_template）等。每个新场景只需新增工具文件 + 注册即可接入，底座零改动。",
+    layer: 4,
+    layerName: "外部配套能力",
+    status: "done",
+    icon: "🧰",
+  },
+  {
+    id: "docx-rw",
+    name: "DOCX 复杂样式读写",
+    description: "后端工具支持读写 .docx 文件的复杂样式（表格、页眉页脚、目录、批注等），将结构化 JSON 渲染进 Word 模板",
+    details:
+      "为测试报告专家场景定制的关键后端能力。支持：(1) 读取 .docx 文件中的复杂样式元素（表格嵌套、合并单元格、页眉页脚、目录域、批注/修订）；(2) 将大模型输出的结构化 JSON 数据精确渲染进已有 Word 模板的占位符（书签/内容控件/文本占位符）；(3) 保留原始模板样式与排版，仅替换数据内容；(4) 基于 python-docx / mammoth 等成熟库在后端安全沙箱中执行。补齐后测试报告专家即可实现「分析 → 生成结构化数据 → 渲染进标准报告模板」的全链路闭环。",
     layer: 4,
     layerName: "外部配套能力",
     status: "planned",
-    icon: "🚦",
+    icon: "📄",
   },
 ];
 
