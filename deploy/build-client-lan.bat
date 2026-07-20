@@ -27,7 +27,7 @@ echo 📁 项目根目录: %cd%
 echo.
 
 :: ========== Step 1: 校验项目文件 ==========
-echo [1/5] 📋 校验项目文件...
+echo [1/6] 📋 校验项目文件...
 if not exist "web-aura-next\package.json" (
     echo ❌ 未找到 web-aura-next\package.json！
     pause
@@ -49,7 +49,7 @@ echo ✅ 所有源文件就绪
 echo.
 
 :: ========== Step 2: 预览并确认配置 ==========
-echo [2/5] 📋 预览内网客户端配置（.env.lan）...
+echo [2/6] 📋 预览内网客户端配置（.env.lan）...
 echo ----------------------------------------
 type "web-aura-next\.env.lan"
 echo ----------------------------------------
@@ -61,7 +61,7 @@ echo 🎯 目标服务端: %SERVER_URL%
 echo.
 
 :: ========== Step 3: 检查 Rust / Node 环境 ==========
-echo [3/5] 🔍 检查构建环境...
+echo [3/6] 🔍 检查构建环境...
 
 where node >nul 2>&1
 if %errorlevel% neq 0 (
@@ -82,8 +82,21 @@ for /f "tokens=*" %%i in ('cargo --version') do set CARGO_VER=%%i
 echo   ✅ %CARGO_VER%
 echo.
 
-:: ========== Step 4: 注入内网配置，构建 Tauri 客户端 ==========
-echo [4/5] ⚡ 编译 Tauri 桌面客户端（内网版本）...
+:: ========== Step 4: 生成应用图标 & 编译 Tauri 客户端 ==========
+echo [4/6] 🎨 生成应用图标...
+cd /d "%PROJECT_ROOT%\web-aura-next"
+
+if exist "scripts\generate-icons.js" (
+    node scripts\generate-icons.js
+    if %errorlevel% neq 0 (
+        echo ⚠️ 图标生成失败，将使用已有图标继续构建
+    )
+) else (
+    echo ⚠️ 未找到 scripts\generate-icons.js，跳过图标生成
+)
+echo.
+
+echo [5/6] ⚡ 编译 Tauri 桌面客户端（内网版本）...
 
 cd /d "%PROJECT_ROOT%\web-aura-next"
 
@@ -128,8 +141,8 @@ echo.
 echo ✅ Tauri 编译完成
 echo.
 
-:: ========== Step 5: 汇总产物到 bin\aura-client\ ==========
-echo [5/5] 📋 汇总构建产物...
+:: ========== Step 6: 汇总产物到 bin\aura-client\ ==========
+echo [6/6] 📋 汇总构建产物...
 
 set "SRC_EXE=%PROJECT_ROOT%\web-aura-next\src-tauri\target\release\aura-client.exe"
 set "SRC_BUNDLE=%PROJECT_ROOT%\web-aura-next\src-tauri\target\release\bundle"
