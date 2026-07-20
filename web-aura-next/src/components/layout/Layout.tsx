@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, type ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { isTauri } from "@/lib/tauri";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 import { StatusBar } from "./StatusBar";
@@ -20,6 +21,15 @@ export const useLayout = () => useContext(LayoutContext);
 
 export function Layout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
+
+  // 在 Tauri 桌面客户端中屏蔽浏览器默认右键菜单
+  // WorkspaceTree 等组件的自定义右键菜单不受影响（它们通过 React 合成事件 + DOM 渲染实现）
+  useEffect(() => {
+    if (!isTauri()) return;
+    const handler = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener("contextmenu", handler);
+    return () => document.removeEventListener("contextmenu", handler);
+  }, []);
 
   const toggleCollapsed = () => setCollapsed((prev) => !prev);
 
