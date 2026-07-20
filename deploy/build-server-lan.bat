@@ -108,7 +108,7 @@ if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%"
 mkdir "%OUT_DIR%" >nul 2>&1
 
 :: 复制 standalone 全部内容（server.js + node_modules + 精简源码）
-echo   复制 .next\standalone\* ...
+echo   [COPY] .next\standalone\* ...
 xcopy "%STANDALONE_SRC%\*" "%OUT_DIR%\" /E /I /Q /H >nul
 echo   ✅ standalone 核心已复制
 
