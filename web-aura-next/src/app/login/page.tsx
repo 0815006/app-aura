@@ -9,6 +9,16 @@ import React, { useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useRouter } from "next/navigation";
 
+/** 强密码校验：至少8位，包含大小写字母、数字、符号 */
+function validatePasswordStrength(pw: string): string | null {
+  if (pw.length < 8) return "密码至少 8 位";
+  if (!/[a-z]/.test(pw)) return "密码需包含小写字母";
+  if (!/[A-Z]/.test(pw)) return "密码需包含大写字母";
+  if (!/[0-9]/.test(pw)) return "密码需包含数字";
+  if (!/[^a-zA-Z0-9]/.test(pw)) return "密码需包含符号（如 !@#$% 等）";
+  return null;
+}
+
 export default function LoginPage() {
   const { login, register } = useAuth();
   const router = useRouter();
@@ -26,6 +36,15 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      if (isRegister) {
+        const pwError = validatePasswordStrength(password);
+        if (pwError) {
+          setError(pwError);
+          setLoading(false);
+          return;
+        }
+      }
+
       const result = isRegister
         ? await register(username, password, displayName || undefined)
         : await login(username, password);
@@ -104,9 +123,9 @@ export default function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={isRegister ? "至少 6 位密码" : "请输入密码"}
+                placeholder={isRegister ? "至少 8 位，含大小写字母、数字、符号" : "请输入密码"}
                 required
-                minLength={isRegister ? 6 : undefined}
+                minLength={isRegister ? 8 : undefined}
                 className="w-full bg-aura-hover border border-aura-border rounded-lg px-4 py-2.5 text-sm text-aura-text placeholder-aura-text-muted focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
               />
             </div>
