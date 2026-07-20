@@ -2,8 +2,26 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 
-const HEALTH_URL = "/api/health";
 const POLL_INTERVAL = 30_000; // 30 秒轮询一次
+
+/**
+ * 获取健康检查的完整 URL
+ *
+ * - 服务端模式（浏览器直连）：使用相对路径 /api/health
+ * - 客户端模式（Tauri 桌面端）：拼接完整服务端地址
+ *   因为打包后前端从 tauri://localhost 加载，相对路径到不了服务器
+ */
+function getHealthUrl(): string {
+  if (typeof window !== "undefined") {
+    const win = window as unknown as Record<string, unknown>;
+    if (win.__AURA_MODE__ === "client") {
+      const serverUrl =
+        (win.__AURA_SERVER_URL__ as string) || "http://localhost:8086";
+      return `${serverUrl}/api/health`;
+    }
+  }
+  return "/api/health";
+}
 
 export function StatusBar() {
   const [time, setTime] = useState("");
@@ -11,7 +29,8 @@ export function StatusBar() {
 
   const checkHealth = useCallback(async () => {
     try {
-      const res = await fetch(HEALTH_URL, { cache: "no-store" });
+      const url = getHealthUrl();
+      const res = await fetch(url, { cache: "no-store" });
       setConnected(res.ok);
     } catch {
       setConnected(false);
