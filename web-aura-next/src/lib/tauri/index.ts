@@ -38,13 +38,11 @@ export interface ShellResult {
 // ============================================================
 
 async function getTauriFs() {
-  // @ts-expect-error -- @tauri-apps/plugin-fs 仅在 Tauri 构建环境中可用
   const mod = await import("@tauri-apps/plugin-fs");
   return mod;
 }
 
 async function getTauriDialog() {
-  // @ts-expect-error -- @tauri-apps/plugin-dialog 仅在 Tauri 构建环境中可用
   const mod = await import("@tauri-apps/plugin-dialog");
   return mod;
 }

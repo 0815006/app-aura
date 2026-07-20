@@ -220,38 +220,61 @@ if exist "%WINSW_SRC%" (
 )
 echo.
 
-:: ---- startServer.bat (放到部署目录运行) ----
+:: ---- startServer.bat (放到部署目录运行，使用 %%~dp0 自动定位) ----
 (
 echo @echo off
 echo chcp 65001 ^>nul 2^>^&1
 echo title Aura Server - 服务管理
-echo setlocal
+echo setlocal EnableExtensions
+echo.
+echo :: 自动定位到脚本所在目录（无论从哪里运行、部署到哪个目录都能正常工作）
+echo cd /d "%%~dp0"
+echo if ^%%errorlevel^%% neq 0 ^(
+echo     echo ❌ 无法进入脚本所在目录: %%%%~dp0
+echo     pause
+echo     exit /b 1
+echo ^)
+echo.
+echo set "WORK_DIR=%%cd%%"
 echo.
 echo echo ==========================================
 echo echo   启动 Aura 智能体平台 ^(Windows 服务^)
-echo echo   工作目录: %DEPLOY_DIR%
+echo echo   工作目录: %%%%WORK_DIR%%%%
 echo echo ==========================================
 echo echo.
 echo.
-echo :: 切到部署目录
-echo cd /d "%DEPLOY_DIR%"
-echo if ^%%errorlevel^%% neq 0 ^(
-echo     echo ❌ 无法进入部署目录 %DEPLOY_DIR%！
-echo     echo   请确认已将 bin\aura-server\ 下所有文件复制到此目录。
+echo :: 检查必要文件是否存在
+echo if not exist "%%WORK_DIR%%\server.js" ^(
+echo     echo ❌ 未找到 server.js，部署包不完整！
+echo     echo   请确保在 bin\aura-server 完整目录下运行此脚本。
+echo     pause
+echo     exit /b 1
+echo ^)
+echo if not exist "%%WORK_DIR%%\AuraServer.exe" ^(
+echo     echo ❌ 未找到 AuraServer.exe ^(WinSW^)，部署包不完整！
+echo     echo   请确保 WinSW-x64.exe 已重命名为 AuraServer.exe 并放在当前目录。
 echo     pause
 echo     exit /b 1
 echo ^)
 echo.
-echo :: 检查必要文件是否存在
-echo if not exist "server.js" ^(
-echo     echo ❌ 未找到 server.js，部署包不完整！
+echo :: 检查 Node.js 是否可用（WinSW 启动服务时需要）
+echo where node ^>nul 2^>^&1
+echo if ^%%errorlevel^%% neq 0 ^(
+echo     echo ❌ Node.js 未找到，请先安装 Node.js 20+ LTS 并加入 PATH！
+echo     echo   下载地址: https://nodejs.org/
 echo     pause
 echo     exit /b 1
 echo ^)
-echo if not exist "AuraServer.exe" ^(
-echo     echo ❌ 未找到 AuraServer.exe ^(WinSW^)，部署包不完整！
-echo     pause
-echo     exit /b 1
+echo for /f "tokens=*" %%%%i in ^('node -v'^) do echo ✅ Node.js 版本: %%%%i
+echo.
+echo :: 自动修补 AuraServer.xml 中的工作目录为当前实际路径
+echo echo 🔧 修补 AuraServer.xml 工作目录...
+echo set "XML_FILE=%%WORK_DIR%%\AuraServer.xml"
+echo if exist "%%XML_FILE%%" ^(
+echo     powershell -NoProfile -Command "(Get-Content '%%XML_FILE%%') -replace '^<workingdirectory^>.*^</workingdirectory^>', ('^<workingdirectory^>' + ('%%WORK_DIR:\=\\%%') + '^</workingdirectory^>') | Set-Content '%%XML_FILE%%' -Encoding UTF8"
+echo     echo ✅ AuraServer.xml workingdirectory 已更新为: %%%%WORK_DIR%%%%
+echo ^) else ^(
+echo     echo ⚠️  未找到 AuraServer.xml，跳过修补
 echo ^)
 echo.
 echo :: 需要以管理员身份运行
@@ -259,6 +282,7 @@ echo net session ^>nul 2^>^&1
 echo if ^%%errorlevel^%% neq 0 ^(
 echo     echo ❌ 请以管理员身份运行此脚本！
 echo     echo   ^(WinSW 安装/启动 Windows 服务需要管理员权限^)
+echo     echo   右键点击 startServer.bat → 以管理员身份运行
 echo     pause
 echo     exit /b 1
 echo ^)
@@ -285,7 +309,7 @@ echo     echo   1. Node.js 是否已安装且加入 PATH
 echo     echo   2. 端口 %SERVER_PORT% 是否被占用
 echo     echo   3. 数据库 %DB_HOST%:%DB_PORT% 是否可连通
 echo     echo.
-echo     echo 查看日志: %DEPLOY_DIR%\AuraServer.wrapper.log
+echo     echo 查看日志: %%%%WORK_DIR%%\AuraServer.wrapper.log
 echo     pause
 echo     exit /b 1
 echo ^)
@@ -296,7 +320,7 @@ echo.
 echo echo ==========================================
 echo echo   ✅ Aura Server 服务已启动
 echo echo   访问: http://localhost:%SERVER_PORT%
-echo echo   日志: %DEPLOY_DIR%\AuraServer.wrapper.log
+echo echo   日志: %%%%WORK_DIR%%\AuraServer.wrapper.log
 echo echo ==========================================
 echo echo.
 echo echo 💡 常用命令:
@@ -306,25 +330,33 @@ echo echo   刷新配置: AuraServer.exe refresh
 echo pause
 ) > "%OUT_DIR%\startServer.bat"
 
-:: ---- stopServer.bat (放到部署目录运行) ----
+:: ---- stopServer.bat (放到部署目录运行，使用 %%~dp0 自动定位) ----
 (
 echo @echo off
 echo chcp 65001 ^>nul 2^>^&1
 echo title Aura Server - 服务管理
 echo setlocal
 echo.
+echo :: 自动定位到脚本所在目录
+echo cd /d "%%~dp0"
+echo if ^%%errorlevel^%% neq 0 ^(
+echo     echo ❌ 无法进入脚本所在目录: %%%%~dp0
+echo     pause
+echo     exit /b 1
+echo ^)
+echo.
+echo set "WORK_DIR=%%cd%%"
+echo.
 echo echo ==========================================
 echo echo   停止 Aura 智能体平台 ^(Windows 服务^)
-echo echo   工作目录: %DEPLOY_DIR%
+echo echo   工作目录: %%%%WORK_DIR%%%%
 echo echo ==========================================
 echo echo.
-echo.
-echo :: 切到部署目录
-echo cd /d "%DEPLOY_DIR%"
 echo.
 echo net session ^>nul 2^>^&1
 echo if ^%%errorlevel^%% neq 0 ^(
 echo     echo ❌ 请以管理员身份运行此脚本！
+echo     echo   右键点击 stopServer.bat → 以管理员身份运行
 echo     pause
 echo     exit /b 1
 echo ^)
