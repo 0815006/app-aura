@@ -6,7 +6,7 @@ setlocal enabledelayedexpansion
 :: =================================================================
 ::   📌 内网地址参数 → 编辑 web-aura-next\.env.lan
 ::      AURA_MODE=client
-::      AURA_SERVER_URL=http://22.188.9.15:8086
+::      AURA_SERVER_URL=http://22.189.27.133:8086
 ::      （客户端通过该地址连接内网 Aura Server）
 :: =================================================================
 
