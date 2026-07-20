@@ -1,4 +1,4 @@
-import { isServerMode, getDataRoot } from "@/lib/env";
+import { getDataRoot } from "@/lib/env";
 import { db } from "@/lib/db/client";
 import { workspaces } from "@/lib/db/schema";
 import { getAuthenticatedUser } from "@/lib/auth";
@@ -17,13 +17,6 @@ import path from "path";
  * ★ Phase 7: 按 user_id 查询 workspace + 路径双重越权校验
  */
 export async function GET(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     // 1. 鉴权
     const auth = await getAuthenticatedUser(req);
@@ -154,13 +147,6 @@ export async function GET(req: Request) {
  * - path: 相对于工作空间根目录的目录路径
  */
 export async function POST(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     // 1. 鉴权
     const auth = await getAuthenticatedUser(req);

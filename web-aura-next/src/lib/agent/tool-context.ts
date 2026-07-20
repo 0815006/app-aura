@@ -8,7 +8,7 @@
  * 异步链不会被其他请求打断（单用户场景完全可靠）。
  */
 import path from "path";
-import { resolveSafePath, getDataRoot, isClientMode } from "@/lib/env";
+import { resolveSafePath, getDataRoot } from "@/lib/env";
 
 export interface ToolContext {
   userId: number | null;
@@ -46,8 +46,6 @@ export function getToolContext(): ToolContext | undefined {
  * 3. 否则 → DATA_ROOT/{userPath}
  */
 export function resolveWorkspaceAwarePath(userPath: string): string {
-  if (isClientMode()) return userPath;
-
   const ctx = getToolContext();
   if (ctx?.workspaceId && ctx.userId) {
     const userRoot = path.resolve(getDataRoot(), "workspaces", `user_${ctx.userId}`);

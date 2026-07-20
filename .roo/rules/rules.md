@@ -9,7 +9,7 @@ app-aura/                   # 顶层主目录
 ├── docs/                   # 开发文档（与源码同仓，非用户知识库）
 ├── deploy/                 # 部署与本地开发脚本
 │   ├── docker-compose.yml  # PostgreSQL + pgvector 数据库编排
-│   ├── pgvector-start.bat  # 启动 PostgreSQL 容器
+│   ├── docker-pgvector-start.bat  # 启动 PostgreSQL 容器
 │   └── dev-start.bat       # 安装依赖 + 数据库迁移 + 启动 Next.js 开发服务器
 └── web-aura-next/          # 核心全栈工程（一套代码，双端共用）
     ├── src/

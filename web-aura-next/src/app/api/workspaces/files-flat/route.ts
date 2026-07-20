@@ -1,4 +1,4 @@
-import { isServerMode, getDataRoot } from "@/lib/env";
+import { getDataRoot } from "@/lib/env";
 import { db } from "@/lib/db/client";
 import { workspaces } from "@/lib/db/schema";
 import { getAuthenticatedUser } from "@/lib/auth";
@@ -16,13 +16,6 @@ import path from "path";
  * 返回: { code: 200, data: { files: { name: string, path: string }[] } }
  */
 export async function GET(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     // 1. 鉴权
     const auth = await getAuthenticatedUser(req);

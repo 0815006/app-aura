@@ -3,15 +3,14 @@
  *
  * 服务端 API 在执行业务逻辑前调用此中间件，获取当前用户身份。
  *
- * 双端逻辑：
- * - 客户端模式（含 X-Aura-Local-Key Header）→ 放行，返回 null，不做服务端 JWT 鉴权
- * - 服务端模式 → 强制校验 JWT Cookie，未登录返回 { userId: null }
+ * 鉴权逻辑：
+ * - 携带 X-Aura-Local-Key Header（客户端免登模式）→ 放行，返回 null，不做 JWT 鉴权
+ * - 否则 → 强制校验 JWT Cookie，未登录返回 { userId: null }
  *
  * 使用示例：
  *   const auth = await authMiddleware(req);
  *   if (!auth.userId) return Response.json({ code: 401, message: "请先登录" }, { status: 401 });
  */
-import { isClientMode } from "@/lib/env";
 import { getAuthenticatedUser, type JwtPayload } from "./index";
 
 export interface AuthResult {
@@ -23,14 +22,9 @@ export interface AuthResult {
 
 /**
  * 服务端 API 鉴权中间件
- * 仅在服务端模式下强制校验；客户端模式（含 X-Aura-Local-Key）放行。
+ * X-Aura-Local-Key 免登放行；否则 JWT Cookie 强制校验。
  */
 export async function authMiddleware(req: Request): Promise<AuthResult> {
-  // 客户端模式不做服务端鉴权
-  if (isClientMode()) {
-    return { userId: null, username: null, isClientMode: true };
-  }
-
   // 检查是否有 X-Aura-Local-Key (客户端免登模式连服务端)
   const localKey = req.headers.get("x-aura-local-key");
   if (localKey) {

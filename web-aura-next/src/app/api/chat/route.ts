@@ -508,11 +508,15 @@ export async function POST(req: Request) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = streamText({
-      model: customProvider(activeModelName, {
-        // ★ 禁用 DeepSeek 思考模式：防止模型在 reasoning 阶段空转后
-        // 以 finishReason="stop" 结束而不实际调用工具
-        thinking: { type: "disabled" as const },
-      }),
+      model: customProvider(activeModelName),
+      // ★ 禁用 DeepSeek 思考模式：防止模型在 reasoning 阶段空转后
+      // 以 finishReason="stop" 结束而不实际调用工具
+      // AI SDK v7: providerOptions 代替 model() 的第二个参数
+      providerOptions: {
+        deepseek: {
+          thinking: { type: "disabled" as const },
+        },
+      },
       system: systemPrompt,
       messages: aiMessages,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -593,7 +597,7 @@ export async function POST(req: Request) {
             });
           }
 
-          if (!isServerMode() || !activeUserId) return;
+          if (!activeUserId) return;
 
           // ============================================================
           // 1. 持久化 chatMessages（原有逻辑）

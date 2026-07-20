@@ -1,14 +1,12 @@
 /**
  * Aura 桌面客户端专用 —— Tauri 原生 API 封装
  *
- * 客户端模式下，文件读写通过 Tauri 原生 FS API 直接操作用户本地文件系统，
- * 天然无浏览器沙箱限制。服务端模式下此模块不被调用。
- *
- * ★ Phase 8: 新增本地模型配置管理 (localStorage)
+ * Phase 1: 客户端为纯壳，文件操作统一通过服务端 API 代理。
+ *          本模块的 Tauri FS/Dialog/Shell 封装保留用于 Phase 2 本地工作空间支持。
+ * Phase 2: 客户端模式下，source=local 工作空间通过 Tauri FS API 直接读写用户本地文件。
  *
  * 规范要点：
- * - 仅客户端模式使用 (AURA_MODE=client)
- * - 提供与 Node.js fs 相似但异步的 API 接口
+ * - Phase 2: source=local 工作空间使用 Tauri FS API
  * - 所有操作通过 @tauri-apps/api 调用，不经过服务端工具逻辑
  */
 
@@ -189,78 +187,18 @@ export async function executeShell(
 }
 
 // ============================================================
-// ★ Phase 8: 本地模型配置 (localStorage)
+// ★ Phase 8 模型配置: re-export from api-client.ts (统一来源)
 // ============================================================
 
-export interface LocalModelConfig {
-  id: string;
-  label: string;
-  modelName: string;
-  apiKey: string;
-  baseUrl: string;
-  isDefault: boolean;
-  createdAt: string;
-}
-
-const LOCAL_CONFIGS_KEY = "aura_local_model_configs";
-const LOCAL_ACTIVE_KEY = "aura_active_model_config_id";
-
-/** 获取所有本地模型配置 */
-export function getLocalModelConfigs(): LocalModelConfig[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(LOCAL_CONFIGS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-/** 保存（新增或更新）本地模型配置 */
-export function saveLocalModelConfig(config: LocalModelConfig): void {
-  if (typeof window === "undefined") return;
-  const configs = getLocalModelConfigs();
-  const idx = configs.findIndex((c) => c.id === config.id);
-
-  if (config.isDefault) {
-    configs.forEach((c) => (c.isDefault = false));
-  }
-
-  if (idx >= 0) {
-    configs[idx] = config;
-  } else {
-    configs.push(config);
-  }
-
-  localStorage.setItem(LOCAL_CONFIGS_KEY, JSON.stringify(configs));
-}
-
-/** 删除本地模型配置 */
-export function deleteLocalModelConfig(id: string): void {
-  if (typeof window === "undefined") return;
-  const configs = getLocalModelConfigs().filter((c) => c.id !== id);
-  localStorage.setItem(LOCAL_CONFIGS_KEY, JSON.stringify(configs));
-
-  const activeId = localStorage.getItem(LOCAL_ACTIVE_KEY);
-  if (activeId === id) {
-    localStorage.removeItem(LOCAL_ACTIVE_KEY);
-  }
-}
-
-/** 获取当前激活的本地模型配置 */
-export function getActiveLocalConfig(): LocalModelConfig | null {
-  const activeId = localStorage.getItem(LOCAL_ACTIVE_KEY);
-  const configs = getLocalModelConfigs();
-  if (activeId) {
-    return configs.find((c) => c.id === activeId) ?? null;
-  }
-  return configs.find((c) => c.isDefault) ?? configs[0] ?? null;
-}
-
-/** 设置当前激活的本地模型配置 */
-export function setActiveLocalConfig(id: string): void {
-  localStorage.setItem(LOCAL_ACTIVE_KEY, id);
-}
+export {
+  getLocalModelConfigs,
+  saveLocalModelConfig,
+  deleteLocalModelConfig,
+  getActiveLocalConfig,
+  getActiveLocalConfigId,
+  setActiveLocalConfigId,
+} from "@/lib/api-client";
+export type { LocalModelConfig } from "@/lib/api-client";
 
 // ============================================================
 // 辅助函数：检测当前环境

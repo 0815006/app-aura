@@ -2,7 +2,7 @@
  * 目录探测器 —— list_directory
  *
  * 获取指定目录下的子目录和文件列表，用于浏览工作空间目录结构。
- * 服务端：校验路径越权；客户端：调用 Tauri 原生 API。
+ * 统一通过 resolveWorkspaceAwarePath 解析路径后使用 Node.js fs 直接读取。
  *
  * ★ DeepSeek 兼容：接受 dir_path 或 path。
  */

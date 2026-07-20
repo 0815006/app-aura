@@ -13,15 +13,13 @@ import { userModelConfigs } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { encrypt, decrypt } from "@/lib/auth/crypto";
-import { isClientMode } from "@/lib/env";
 
 // ============================================================
 // 辅助函数
 // ============================================================
 
-/** 提取当前用户 ID（服务端模式），客户端模式返回 null */
+/** 提取当前用户 ID */
 async function getUserId(req: Request): Promise<number | null> {
-  if (isClientMode()) return null;
   const auth = await getAuthenticatedUser(req);
   return auth?.userId ?? null;
 }

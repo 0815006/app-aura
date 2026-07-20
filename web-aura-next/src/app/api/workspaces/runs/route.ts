@@ -1,7 +1,6 @@
 import { db } from "@/lib/db/client";
 import { workspaceRuns } from "@/lib/db/schema";
 import { getAuthenticatedUser } from "@/lib/auth";
-import { isServerMode } from "@/lib/env";
 import { eq, desc, and, SQL } from "drizzle-orm";
 
 /**
@@ -18,13 +17,6 @@ import { eq, desc, and, SQL } from "drizzle-orm";
  * - offset (可选，默认 0): 分页偏移
  */
 export async function GET(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "运行记录仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     const auth = await getAuthenticatedUser(req);
     if (!auth) {

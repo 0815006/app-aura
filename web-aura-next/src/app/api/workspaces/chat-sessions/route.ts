@@ -1,6 +1,5 @@
 import { db } from "@/lib/db/client";
 import { getAuthenticatedUser } from "@/lib/auth";
-import { isServerMode } from "@/lib/env";
 import { sql } from "drizzle-orm";
 
 /**
@@ -19,13 +18,6 @@ import { sql } from "drizzle-orm";
  * - all (可选): 任意真值则返回所有会话（limit 失效）
  */
 export async function GET(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "会话列表仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     const auth = await getAuthenticatedUser(req);
     if (!auth) {

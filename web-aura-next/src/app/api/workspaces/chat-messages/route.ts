@@ -1,7 +1,6 @@
 import { db } from "@/lib/db/client";
 import { chatMessages } from "@/lib/db/schema";
 import { getAuthenticatedUser } from "@/lib/auth";
-import { isServerMode } from "@/lib/env";
 import { eq, and, asc } from "drizzle-orm";
 
 /**
@@ -15,13 +14,6 @@ import { eq, and, asc } from "drizzle-orm";
  * - sessionId (必填): 会话 ID
  */
 export async function GET(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "历史消息仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     const auth = await getAuthenticatedUser(req);
     if (!auth) {

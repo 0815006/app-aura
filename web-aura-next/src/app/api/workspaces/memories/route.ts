@@ -1,7 +1,6 @@
 import { db } from "@/lib/db/client";
 import { workspaceMemories } from "@/lib/db/schema";
 import { getAuthenticatedUser } from "@/lib/auth";
-import { isServerMode } from "@/lib/env";
 import { eq, desc, and } from "drizzle-orm";
 
 /**
@@ -15,13 +14,6 @@ import { eq, desc, and } from "drizzle-orm";
  * - category (可选): 按分类过滤
  */
 export async function GET(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "记忆管理仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     const auth = await getAuthenticatedUser(req);
     if (!auth) {
@@ -89,13 +81,6 @@ export async function GET(req: Request) {
  * Body: { workspaceId, key, content, category?, importance? }
  */
 export async function POST(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "记忆管理仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     const auth = await getAuthenticatedUser(req);
     if (!auth) {
@@ -149,13 +134,6 @@ export async function POST(req: Request) {
  * 删除一条工作空间记忆。
  */
 export async function DELETE(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "记忆管理仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     const auth = await getAuthenticatedUser(req);
     if (!auth) {

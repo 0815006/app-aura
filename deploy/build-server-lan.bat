@@ -112,6 +112,12 @@ echo   复制 .next\standalone\* ...
 xcopy "%STANDALONE_SRC%\*" "%OUT_DIR%\" /E /I /Q /H >nul
 echo   ✅ standalone 核心已复制
 
+:: 清理不必要的 Tauri 桌面壳目录（服务端不需要 Rust 编译产物）
+if exist "%OUT_DIR%\src-tauri" (
+    rmdir /s /q "%OUT_DIR%\src-tauri" >nul 2>&1
+    echo   🧹 已清理 src-tauri\ ^(服务端不需要^)
+)
+
 :: 复制 public 静态资源
 set "PUBLIC_SRC=%PROJECT_ROOT%\web-aura-next\public"
 if exist "%PUBLIC_SRC%" (
@@ -361,7 +367,7 @@ echo       日志:   %DEPLOY_DIR%\AuraServer.out.log
 echo.
 echo   💡 修改参数: 编辑本 bat 头部 set 变量，重新构建即可
 echo   💡 手动运行: cd %DEPLOY_DIR% ^&^& node server.js
-echo   💡 数据库请单独启动 ^(pgvector-start.bat 或 docker-compose^)
+echo   💡 数据库请单独启动 ^(docker-pgvector-start.bat 或 docker-compose^)
 echo ==================================================
 echo.
 

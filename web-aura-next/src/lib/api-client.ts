@@ -55,7 +55,7 @@ function getBaseUrl(): string {
   if (mode === "client") {
     if (typeof window !== "undefined") {
       const win = window as unknown as Record<string, unknown>;
-      return (win.__AURA_SERVER_URL__ as string) || "http://localhost:8086";
+      return (win.__AURA_SERVER_URL__ as string) || (process.env.AURA_SERVER_URL as string) || "http://localhost:8086";
     }
     return "http://localhost:8086";
   }

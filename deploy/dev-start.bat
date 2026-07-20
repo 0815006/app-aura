@@ -4,7 +4,7 @@ chcp 65001 >nul 2>&1
 
 echo ========================================
 echo   Aura 智能体平台 - 本地开发环境启动
-echo   ^(数据库请单独启动: deploy\run-pgvector-dev.bat^)
+echo   ^(PostgreSQL 请确保已启动: localhost:5432^)
 echo ========================================
 echo.
 echo [预检] 当前目录: %CD%
@@ -44,13 +44,7 @@ if %errorlevel% neq 0 (
 REM ---- 3. 数据库自动迁移 (对标 Flyway) ----
 echo.
 echo [2/3] 执行数据库迁移 ^(Drizzle Kit^)...
-echo   等待 PostgreSQL 就绪...
-REM 等待 PG 端口可连（最多等 30 秒）
-for /L %%i in (1,1,30) do (
-    docker exec aura-postgres pg_isready -U root -d aura_db >nul 2>&1 && goto :pg_ready
-    timeout /t 1 /nobreak >nul
-)
-:pg_ready
+echo   确保 PostgreSQL 已在 localhost:5432 运行...
 call npx tsx src/lib/db/migrate.ts
 if %errorlevel% neq 0 (
     echo [警告] 数据库迁移失败，但继续启动服务...

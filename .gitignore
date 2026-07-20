@@ -74,5 +74,9 @@ web-aura-next/.pnpm-debug.log*
 *.key
 *.crt
 
+# --- Tauri / Rust ---
+web-aura-next/src-tauri/target/
+web-aura-next/src-tauri/gen/
+
 # --- 零字节占位 (保留空目录) ---
 # 如需保留空目录结构，在目录内放 .gitkeep 即可

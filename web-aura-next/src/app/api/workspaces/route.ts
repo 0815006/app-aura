@@ -3,7 +3,6 @@ import { workspaces } from "@/lib/db/schema";
 import {
   createWorkspaceDirForUser,
   removeWorkspaceDirForUser,
-  isServerMode,
 } from "@/lib/env";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { eq, and, desc } from "drizzle-orm";
@@ -19,13 +18,6 @@ import { eq, and, desc } from "drizzle-orm";
  * ★ Phase 7: 严格按 user_id 过滤
  */
 export async function GET(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "工作空间管理仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     const auth = await getAuthenticatedUser(req);
     if (!auth) {
@@ -96,13 +88,6 @@ export async function GET(req: Request) {
  * ★ Phase 7: 关联 user_id + 按用户创建目录
  */
 export async function POST(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "工作空间管理仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     const auth = await getAuthenticatedUser(req);
     if (!auth) {
@@ -159,13 +144,6 @@ export async function POST(req: Request) {
  * ★ Phase 7: 校验 user_id 归属
  */
 export async function DELETE(req: Request) {
-  if (!isServerMode()) {
-    return Response.json(
-      { code: 400, message: "工作空间管理仅服务端模式可用" },
-      { status: 400 }
-    );
-  }
-
   try {
     const auth = await getAuthenticatedUser(req);
     if (!auth) {

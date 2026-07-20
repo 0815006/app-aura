@@ -1,8 +1,8 @@
 /**
  * Aura 环境变量与路径辅助
  *
- * 双端架构核心：
- * - AURA_MODE = 'server' | 'client'
+ * Phase 1: 服务端统一处理文件路径与工作空间目录。
+ * - AURA_MODE = 'server' | 'client'（仅作语义标记）
  * - DATA_ROOT  服务端数据根目录
  * - AURA_SERVER_URL 客户端模式下指向服务端地址
  */
@@ -34,8 +34,6 @@ export function isClientMode(): boolean {
  * 优先读环境变量 DATA_ROOT，否则按平台回退默认值。
  */
 export function getDataRoot(): string {
-  if (isClientMode()) return "";
-
   const fromEnv = process.env.DATA_ROOT;
   if (fromEnv) return fromEnv;
 
@@ -81,7 +79,6 @@ export function getWorkspaceRootForUser(
   userId: number,
   workspaceId: string
 ): string {
-  if (isClientMode()) return "";
   return path.join(getDataRoot(), "workspaces", `user_${userId}`, workspaceId);
 }
 
@@ -90,7 +87,6 @@ export function getWorkspaceRootForUser(
  * 适用于尚无 userId 上下文的场景。
  */
 export function getWorkspaceRoot(workspaceId: string): string {
-  if (isClientMode()) return "";
   return path.join(getDataRoot(), "workspaces", workspaceId);
 }
 
@@ -107,10 +103,6 @@ export function resolveWorkspacePathForUser(
   workspaceId: string,
   userPath: string
 ): string {
-  if (isClientMode()) {
-    return userPath;
-  }
-
   const userRoot = path.resolve(
     getDataRoot(),
     "workspaces",
@@ -141,10 +133,6 @@ export function resolveWorkspacePath(
   workspaceId: string,
   userPath: string
 ): string {
-  if (isClientMode()) {
-    return userPath;
-  }
-
   const workspaceRoot = path.resolve(getWorkspaceRoot(workspaceId));
   const targetPath = path.resolve(workspaceRoot, userPath);
 
@@ -163,8 +151,6 @@ export function resolveWorkspacePath(
  * @throws 路径越权时抛出错误
  */
 export function resolveSafePath(userPath: string): string {
-  if (isClientMode()) return userPath;
-
   const allowedRoot = path.resolve(getDataRoot());
   const targetPath = path.resolve(allowedRoot, userPath);
   if (!targetPath.startsWith(allowedRoot)) {
@@ -180,8 +166,6 @@ export function resolveSafePath(userPath: string): string {
  * 在服务启动时调用一次即可。
  */
 export function ensureDataDirs(): void {
-  if (isClientMode()) return;
-
   const dataRoot = getDataRoot();
   const subDirs = ["workspaces", "uploads", "logs"];
 
@@ -199,8 +183,6 @@ export function ensureDataDirs(): void {
  * 新建工作空间时调用
  */
 export function createWorkspaceDir(workspaceId: string): string {
-  if (isClientMode()) return "";
-
   // 使用旧路径格式（无 userId），userId 级别的目录在用户注册时创建
   const workspaceRoot = getWorkspaceRoot(workspaceId);
   if (!fs.existsSync(workspaceRoot)) {
@@ -222,8 +204,6 @@ export function createWorkspaceDirForUser(
   userId: number,
   workspaceId: string
 ): string {
-  if (isClientMode()) return "";
-
   const workspaceRoot = getWorkspaceRootForUser(userId, workspaceId);
   if (!fs.existsSync(workspaceRoot)) {
     fs.mkdirSync(workspaceRoot, { recursive: true });
@@ -241,8 +221,6 @@ export function createWorkspaceDirForUser(
  * 删除工作空间时调用
  */
 export function removeWorkspaceDir(workspaceId: string): void {
-  if (isClientMode()) return;
-
   const workspaceRoot = getWorkspaceRoot(workspaceId);
   if (fs.existsSync(workspaceRoot)) {
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
@@ -257,8 +235,6 @@ export function removeWorkspaceDirForUser(
   userId: number,
   workspaceId: string
 ): void {
-  if (isClientMode()) return;
-
   const workspaceRoot = getWorkspaceRootForUser(userId, workspaceId);
   if (fs.existsSync(workspaceRoot)) {
     fs.rmSync(workspaceRoot, { recursive: true, force: true });

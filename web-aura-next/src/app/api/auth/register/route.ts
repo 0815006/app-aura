@@ -47,9 +47,10 @@ export async function POST(req: Request) {
       );
     }
 
-    if (password.length < 6) {
+    // 客户端已将密码做 SHA-256 哈希，此处收到的应为 64 位十六进制串
+    if (!/^[a-f0-9]{64}$/.test(password)) {
       return Response.json(
-        { code: 400, message: "密码长度至少 6 位" },
+        { code: 400, message: "密码格式无效" },
         { status: 400 }
       );
     }

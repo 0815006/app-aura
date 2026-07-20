@@ -14,6 +14,7 @@ import React, {
   useCallback,
   type ReactNode,
 } from "react";
+import { hashPasswordClient } from "@/lib/auth/client-hash";
 
 // ============================================================
 // 类型定义
@@ -72,10 +73,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (username: string, password: string) => {
       try {
+        const hashed = await hashPasswordClient(password);
         const res = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username, password: hashed }),
         });
         const data = await res.json();
         if (data.code === 200 && data.data?.user) {
@@ -94,10 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(
     async (username: string, password: string, displayName?: string) => {
       try {
+        const hashed = await hashPasswordClient(password);
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password, displayName }),
+          body: JSON.stringify({ username, password: hashed, displayName }),
         });
         const data = await res.json();
         if (data.code === 200 && data.data?.user) {

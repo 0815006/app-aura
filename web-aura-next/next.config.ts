@@ -1,13 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // 生产环境 standalone 模式，支持独立 Node.js 部署
+  // 服务端部署用 standalone，Tauri 客户端也用 standalone
+  // Tauri 构建脚本会从 .next/server/app/ 提取预渲染的静态 HTML 页面
   output: "standalone",
 
-  // 暴露给客户端的公共环境变量
+  // 暴露给客户端的公共环境变量（构建时内联到客户端 JS bundle）
   env: {
-    // NEXT_PUBLIC_ 前缀的变量会被内联到客户端 JS bundle 中
-    // 这些变量在构建时确定，客户端模式通过 AURA_SERVER_URL 转发 API 请求
+    AURA_MODE: process.env.AURA_MODE,
+    AURA_SERVER_URL: process.env.AURA_SERVER_URL,
   },
 
   // 允许的远程图片域名
