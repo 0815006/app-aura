@@ -15,6 +15,15 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [],
   },
+
+  // 排除含原生模块 / 动态 require 的包，避免 Turbopack standalone 构建时
+  // chunk 依赖解析异常（Module factory is not available）
+  serverExternalPackages: [
+    "bcryptjs",
+    "jose",
+    "drizzle-orm",
+    "pg",
+  ],
 };
 
 export default nextConfig;

@@ -153,6 +153,19 @@ if exist "%STATIC_SRC%" (
 )
 
 echo.
+:: 补偿 Next.js 文件追踪：某些包有静态资源（json/bin/node 等），
+:: tracer 只追踪 JS import 链，非 JS 文件会被剪裁导致运行时报
+:: "Cannot find module"。这里用 dev 版完整 node_modules 直接覆写。
+echo   [FIX] 覆写被剪裁的 node_modules 包...
+set "SRC_NM=%PROJECT_ROOT%\web-aura-next\node_modules"
+set "DST_NM=%OUT_DIR%\node_modules"
+for %%p in (playwright-core drizzle-orm) do (
+    if exist "!SRC_NM!\%%p\" (
+        if exist "!DST_NM!\%%p\" rmdir /s /q "!DST_NM!\%%p" >nul 2>&1
+        xcopy "!SRC_NM!\%%p\" "!DST_NM!\%%p\" /E /I /Q /H /Y >nul
+        echo     ✅ %%p 完整覆写
+    )
+)
 
 :: ========== Step 5: 生成 .env 环境变量文件 ==========
 echo [5/7] ⚙️  生成运行时环境变量文件...
@@ -178,6 +191,11 @@ echo.
 echo [6/7] ⚙️  生成 WinSW 服务定义文件...
 echo   工作目录: %DEPLOY_DIR%
 
+:: 检测 Node.js 完整路径（WinSW 以 SYSTEM 账户运行时 PATH 可能不含用户安装的 Node.js）
+for /f "tokens=*" %%i in ('where node') do set "NODE_FULL_PATH=%%i"
+if not defined NODE_FULL_PATH set "NODE_FULL_PATH=node"
+echo   检测到 Node.js: !NODE_FULL_PATH!
+
 :: ---- AuraServer.xml (workingdirectory 指向生产部署目录) ----
 :: WinSW 环境变量中路径反斜杠需转义为 \\，批处理中写四个斜杠 \\\\
 (
@@ -185,7 +203,7 @@ echo ^<service^>
 echo   ^<id^>aura-server^</id^>
 echo   ^<name^>Aura 智能体平台服务^</name^>
 echo   ^<description^>Aura Next.js Standalone 全栈服务 ^(Node.js 20+^)^</description^>
-echo   ^<executable^>node^</executable^>
+echo   ^<executable^>!NODE_FULL_PATH!^</executable^>
 echo   ^<arguments^>server.js^</arguments^>
 echo   ^<workingdirectory^>%DEPLOY_DIR:\=\\%^</workingdirectory^>
 echo   ^<env name="DATABASE_URL" value="%DATABASE_URL%"/^>
@@ -203,8 +221,8 @@ echo ^</service^>
 echo   ✅ AuraServer.xml 已生成 ^(workingdirectory=%DEPLOY_DIR%^)
 echo.
 
-:: ========== Step 7: 复制 WinSW + 生成启停脚本 ==========
-echo [7/7] 📝 复制 WinSW 并生成启停脚本...
+:: ========== Step 7: 复制 WinSW ==========
+echo [7/7] 📝 复制 WinSW 可执行文件...
 
 :: ---- 复制 WinSW 可执行文件 ----
 set "WINSW_SRC=%PROJECT_ROOT%\deploy\WinSW-x64.exe"
@@ -220,142 +238,6 @@ if exist "%WINSW_SRC%" (
 )
 echo.
 
-:: ---- startServer.bat ----
-(
-echo @echo off
-echo chcp 65001 ^>nul 2^>^&1
-echo title Aura Server - 服务管理
-echo setlocal
-echo.
-echo echo ==========================================
-echo echo   启动 Aura 智能体平台 ^(Windows 服务^)
-echo echo   工作目录: %DEPLOY_DIR%
-echo echo ==========================================
-echo echo.
-echo.
-echo :: 切到部署目录
-echo cd /d "%DEPLOY_DIR%"
-echo if ^%%errorlevel^%% neq 0 ^(
-echo     echo ❌ 无法进入部署目录 %DEPLOY_DIR%！
-echo     echo   请确认已将 bin\aura-server\ 下所有文件复制到此目录。
-echo     pause
-echo     exit /b 1
-echo ^)
-echo.
-echo :: 检查必要文件
-echo if not exist "server.js" ^(
-echo     echo ❌ 未找到 server.js，部署包不完整！
-echo     pause
-echo     exit /b 1
-echo ^)
-echo if not exist "AuraServer.exe" ^(
-echo     echo ❌ 未找到 AuraServer.exe ^(WinSW^)，部署包不完整！
-echo     pause
-echo     exit /b 1
-echo ^)
-echo.
-echo :: 检查 Node.js
-echo where node ^>nul 2^>^&1
-echo if ^%%errorlevel^%% neq 0 ^(
-echo     echo ❌ Node.js 未找到，请先安装 Node.js 20+ LTS 并加入 PATH！
-echo     echo   下载地址: https://nodejs.org/
-echo     pause
-echo     exit /b 1
-echo ^)
-echo for /f "tokens=*" %%%%i in ^('node -v'^) do echo ✅ Node.js 版本: %%%%i
-echo.
-echo :: 需要以管理员身份运行
-echo net session ^>nul 2^>^&1
-echo if ^%%errorlevel^%% neq 0 ^(
-echo     echo ❌ 请以管理员身份运行此脚本！
-echo     echo   ^(WinSW 安装/启动 Windows 服务需要管理员权限^)
-echo     echo   右键点击 startServer.bat → 以管理员身份运行
-echo     pause
-echo     exit /b 1
-echo ^)
-echo.
-echo echo [1/3] 安装服务...
-echo AuraServer.exe install
-echo if ^%%errorlevel^%% neq 0 ^(
-echo     echo ⚠️  服务可能已安装，尝试重新安装...
-echo     AuraServer.exe uninstall
-echo     timeout /t 2 /nobreak ^>nul
-echo     AuraServer.exe install
-echo     if ^%%errorlevel^%% neq 0 ^(
-echo         echo ❌ 服务安装失败！
-echo         pause
-echo         exit /b 1
-echo     ^)
-echo ^)
-echo.
-echo echo [2/3] 启动服务...
-echo AuraServer.exe start
-echo if ^%%errorlevel^%% neq 0 ^(
-echo     echo ❌ 服务启动失败！请检查:
-echo     echo   1. Node.js 是否已安装且加入 PATH
-echo     echo   2. 端口 %SERVER_PORT% 是否被占用
-echo     echo   3. 数据库 %DB_HOST%:%DB_PORT% 是否可连通
-echo     echo.
-echo     echo 查看日志: %DEPLOY_DIR%\AuraServer.wrapper.log
-echo     pause
-echo     exit /b 1
-echo ^)
-echo.
-echo echo [3/3] 校验服务状态...
-echo AuraServer.exe status
-echo.
-echo echo ==========================================
-echo echo   ✅ Aura Server 服务已启动
-echo echo   访问: http://localhost:%SERVER_PORT%
-echo echo   日志: %DEPLOY_DIR%\AuraServer.wrapper.log
-echo echo ==========================================
-echo echo.
-echo echo 💡 常用命令:
-echo echo   查看状态: AuraServer.exe status
-echo echo   重启服务: AuraServer.exe restart
-echo echo   刷新配置: AuraServer.exe refresh
-echo pause
-) > "%OUT_DIR%\startServer.bat"
-
-:: ---- stopServer.bat ----
-(
-echo @echo off
-echo chcp 65001 ^>nul 2^>^&1
-echo title Aura Server - 服务管理
-echo setlocal
-echo.
-echo echo ==========================================
-echo echo   停止 Aura 智能体平台 ^(Windows 服务^)
-echo echo   工作目录: %DEPLOY_DIR%
-echo echo ==========================================
-echo echo.
-echo.
-echo :: 切到部署目录
-echo cd /d "%DEPLOY_DIR%"
-echo.
-echo net session ^>nul 2^>^&1
-echo if ^%%errorlevel^%% neq 0 ^(
-echo     echo ❌ 请以管理员身份运行此脚本！
-echo     echo   右键点击 stopServer.bat → 以管理员身份运行
-echo     pause
-echo     exit /b 1
-echo ^)
-echo.
-echo echo 正在停止服务...
-echo AuraServer.exe stop
-echo echo.
-echo echo 正在卸载服务...
-echo AuraServer.exe uninstall
-echo echo.
-echo echo ✅ 服务已停止并卸载
-echo echo.
-echo echo 💡 如需重新启动，请运行: startServer.bat
-echo pause
-) > "%OUT_DIR%\stopServer.bat"
-
-echo   ✅ startServer.bat / stopServer.bat 已生成
-echo.
-
 :: ========== 输出完成信息 ==========
 echo ==================================================
 echo   🏁  构建完成！内网 Aura Server 版本
@@ -367,19 +249,21 @@ echo         ├── AuraServer.xml         ^(WinSW 服务定义^)
 echo         ├── server.js              ^(Next.js Standalone 入口^)
 echo         ├── node_modules\          ^(生产依赖^)
 echo         ├── .next\                 ^(编译产物 + 静态资源^)
-echo         ├── public\                ^(静态资源 ^(如有^)^)
-echo         ├── .env                   ^(环境变量备用^)
-echo         ├── startServer.bat        ^(安装 + 启动 Windows 服务^)
-echo         └── stopServer.bat         ^(停止 + 卸载 Windows 服务^)
+echo         ├── public\                ^(静态资源^)
+echo         ├── src\                   ^(API 路由源码 + migrate.cjs^)
+echo         ├── drizzle\               ^(数据库迁移 SQL^)
+echo         └── .env                   ^(环境变量^)
 echo.
-echo   📌 部署步骤:
+echo   📌 部署步骤 ^(详见 docs\建构打包和生产部署指引.md^):
 echo       1. 将 bin\aura-server\ 下所有文件复制到 %DEPLOY_DIR%\
-echo       2. 检查 %DEPLOY_DIR%\AuraServer.xml 中的数据库连接参数
-echo       3. 确保 PostgreSQL 数据库已启动且可连通
-echo       4. 以管理员身份运行 %DEPLOY_DIR%\startServer.bat
+echo       2. 【首次/表结构变更时】执行数据库迁移: node src\lib\db\migrate.cjs
+echo       3. 以管理员身份打开 cmd，cd /d %DEPLOY_DIR%
+echo       4. 安装并启动服务:
+echo             AuraServer.exe install
+echo             AuraServer.exe start
 echo       5. 浏览器验证: http://localhost:%SERVER_PORT%
 echo.
-echo   📌 Windows 服务管理 ^(在 %DEPLOY_DIR% 目录执行^):
+echo   📌 WinSW 服务管理 ^(在 %DEPLOY_DIR% 目录以管理员身份执行^):
 echo       安装:   AuraServer.exe install
 echo       启动:   AuraServer.exe start
 echo       停止:   AuraServer.exe stop
@@ -387,10 +271,8 @@ echo       卸载:   AuraServer.exe uninstall
 echo       状态:   AuraServer.exe status
 echo       重启:   AuraServer.exe restart
 echo       日志:   %DEPLOY_DIR%\AuraServer.wrapper.log
-echo       日志:   %DEPLOY_DIR%\AuraServer.out.log
 echo.
 echo   💡 修改参数: 编辑本 bat 头部 set 变量，重新构建即可
-echo   💡 手动运行: cd %DEPLOY_DIR% ^&^& node server.js
 echo   💡 数据库请单独启动 ^(docker-pgvector-start.bat 或 docker-compose^)
 echo ==================================================
 echo.
