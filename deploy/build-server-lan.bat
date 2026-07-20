@@ -109,21 +109,33 @@ mkdir "%OUT_DIR%" >nul 2>&1
 
 :: 复制 standalone 全部内容（server.js + node_modules + 精简源码）
 echo   [COPY] .next\standalone\* ...
-xcopy "%STANDALONE_SRC%\*" "%OUT_DIR%\" /E /I /Q /H >nul
+xcopy "%STANDALONE_SRC%\*" "%OUT_DIR%\" /E /I /Q /H /Y >nul
 echo   ✅ standalone 核心已复制
 
-:: 清理不必要的 Tauri 桌面壳目录（服务端不需要 Rust 编译产物）
+:: 清理服务端不需要的文件（Tauri 桌面壳 / 源码文档 / 构建配置）
 if exist "%OUT_DIR%\src-tauri" (
     rmdir /s /q "%OUT_DIR%\src-tauri" >nul 2>&1
-    echo   🧹 已清理 src-tauri\ ^(服务端不需要^)
+    echo   🧹 已清理 src-tauri\
 )
+if exist "%OUT_DIR%\out" (
+    rmdir /s /q "%OUT_DIR%\out" >nul 2>&1
+    echo   🧹 已清理 out\ ^(Tauri 前端产物^)
+)
+if exist "%OUT_DIR%\scripts" (
+    rmdir /s /q "%OUT_DIR%\scripts" >nul 2>&1
+    echo   🧹 已清理 scripts\
+)
+for %%f in (AGENTS.md CLAUDE.md README.md eslint.config.mjs next.config.ts postcss.config.mjs drizzle.config.ts tsconfig.json tsconfig.tsbuildinfo package.json package-lock.json) do (
+    if exist "%OUT_DIR%\%%f" del /q "%OUT_DIR%\%%f" >nul 2>&1
+)
+echo   🧹 已清理 AGENTS.md / README.md / eslint / tsconfig / package.json 等
 
 :: 复制 public 静态资源
 set "PUBLIC_SRC=%PROJECT_ROOT%\web-aura-next\public"
 if exist "%PUBLIC_SRC%" (
     set "PUBLIC_DST=%OUT_DIR%\public"
     if not exist "!PUBLIC_DST!" mkdir "!PUBLIC_DST!" >nul 2>&1
-    xcopy "%PUBLIC_SRC%\*" "!PUBLIC_DST!\" /E /I /Q /H >nul
+    xcopy "%PUBLIC_SRC%\*" "!PUBLIC_DST!\" /E /I /Q /H /Y >nul
     echo   ✅ public\ 静态资源已复制
 ) else (
     echo   ⚠️  public\ 目录不存在，跳过
@@ -134,7 +146,7 @@ set "STATIC_SRC=%PROJECT_ROOT%\web-aura-next\.next\static"
 if exist "%STATIC_SRC%" (
     set "STATIC_DST=%OUT_DIR%\.next\static"
     if not exist "!STATIC_DST!" mkdir "!STATIC_DST!" >nul 2>&1
-    xcopy "%STATIC_SRC%\*" "!STATIC_DST!\" /E /I /Q /H >nul
+    xcopy "%STATIC_SRC%\*" "!STATIC_DST!\" /E /I /Q /H /Y >nul
     echo   ✅ .next\static\ 已复制
 ) else (
     echo   ⚠️  .next\static\ 目录不存在，跳过
