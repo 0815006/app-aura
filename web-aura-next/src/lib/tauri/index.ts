@@ -185,20 +185,6 @@ export async function executeShell(
 }
 
 // ============================================================
-// ★ Phase 8 模型配置: re-export from api-client.ts (统一来源)
-// ============================================================
-
-export {
-  getLocalModelConfigs,
-  saveLocalModelConfig,
-  deleteLocalModelConfig,
-  getActiveLocalConfig,
-  getActiveLocalConfigId,
-  setActiveLocalConfigId,
-} from "@/lib/api-client";
-export type { LocalModelConfig } from "@/lib/api-client";
-
-// ============================================================
 // 辅助函数：检测当前环境
 // ============================================================
 

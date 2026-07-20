@@ -84,17 +84,14 @@ export default function AgentWorkbench() {
   const { user, isLoading: authLoading } = useAuth();
 
   // ============================================================
-  // ★ Phase 5: 路由保护
+  // 路由保护：未登录统一重定向到 /login
+  // 客户端模式也走 JWT 登录，与浏览器一致
   // ============================================================
-  const isClientMode =
-    typeof window !== "undefined" &&
-    !!(window as unknown as Record<string, unknown>).__AURA_MODE__;
-
   useEffect(() => {
-    if (!authLoading && !user && !isClientMode) {
+    if (!authLoading && !user) {
       router.push("/login");
     }
-  }, [authLoading, user, isClientMode, router]);
+  }, [authLoading, user, router]);
 
   // ============================================================
   // 状态

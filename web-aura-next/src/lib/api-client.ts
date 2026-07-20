@@ -5,7 +5,7 @@
  * - 服务端模式 (AURA_MODE=server)：直接请求本地 /api/* 路由
  * - 客户端模式 (AURA_MODE=client)：自动将 /api/* 请求转发到服务端地址
  *
- * ★ Phase 8: 客户端模式自动注入 X-Aura-Local-Key header
+ * 客户端与服务端使用统一的 JWT 认证（Cookie），模型配置由服务端 /api/models 管理。
  *
  * 所有前端 REST 接口统一走此模块，禁止直接使用裸 fetch。
  */
@@ -14,19 +14,6 @@ export interface ApiResponse<T = unknown> {
   code: number;
   message: string;
   data?: T;
-}
-
-/**
- * 客户端模型配置（本地存储，不经服务端 DB）
- */
-export interface LocalModelConfig {
-  id: string;
-  label: string;
-  modelName: string;
-  apiKey: string;
-  baseUrl: string;
-  isDefault: boolean;
-  createdAt: string;
 }
 
 /**
@@ -63,80 +50,6 @@ function getBaseUrl(): string {
 }
 
 // ============================================================
-// ★ Phase 8: 本地模型配置管理 (localStorage)
-// ============================================================
-
-const LOCAL_CONFIGS_KEY = "aura_local_model_configs";
-const LOCAL_ACTIVE_CONFIG_KEY = "aura_active_model_config_id";
-
-/** 获取客户端本地所有模型配置 */
-export function getLocalModelConfigs(): LocalModelConfig[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(LOCAL_CONFIGS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-/** 保存客户端本地模型配置 */
-export function saveLocalModelConfig(config: LocalModelConfig): void {
-  if (typeof window === "undefined") return;
-  const configs = getLocalModelConfigs();
-  const idx = configs.findIndex((c) => c.id === config.id);
-
-  if (config.isDefault) {
-    // 取消其他默认
-    configs.forEach((c) => (c.isDefault = false));
-  }
-
-  if (idx >= 0) {
-    configs[idx] = config;
-  } else {
-    configs.push(config);
-  }
-
-  localStorage.setItem(LOCAL_CONFIGS_KEY, JSON.stringify(configs));
-}
-
-/** 删除客户端本地模型配置 */
-export function deleteLocalModelConfig(id: string): void {
-  if (typeof window === "undefined") return;
-  const configs = getLocalModelConfigs().filter((c) => c.id !== id);
-  localStorage.setItem(LOCAL_CONFIGS_KEY, JSON.stringify(configs));
-
-  // 如果删的是活跃的，清除活跃标记
-  const activeId = getActiveLocalConfigId();
-  if (activeId === id) {
-    localStorage.removeItem(LOCAL_ACTIVE_CONFIG_KEY);
-  }
-}
-
-/** 获取当前激活的本地模型配置 ID */
-export function getActiveLocalConfigId(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(LOCAL_ACTIVE_CONFIG_KEY);
-}
-
-/** 设置当前激活的本地模型配置 ID */
-export function setActiveLocalConfigId(id: string): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(LOCAL_ACTIVE_CONFIG_KEY, id);
-}
-
-/** 获取当前激活的完整本地模型配置 */
-export function getActiveLocalConfig(): LocalModelConfig | null {
-  const activeId = getActiveLocalConfigId();
-  if (!activeId) {
-    // 返回默认项
-    const configs = getLocalModelConfigs();
-    return configs.find((c) => c.isDefault) ?? configs[0] ?? null;
-  }
-  return getLocalModelConfigs().find((c) => c.id === activeId) ?? null;
-}
-
-// ============================================================
 // 请求核心
 // ============================================================
 
@@ -146,24 +59,16 @@ async function request<T>(
 ): Promise<ApiResponse<T>> {
   const baseUrl = getBaseUrl();
   const fullUrl = `${baseUrl}${url}`;
-  const mode = getAuraMode();
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string> | undefined),
   };
 
-  // ★ Phase 8: 客户端模式自动注入 X-Aura-Local-Key + 模型配置
-  if (mode === "client" && url === "/api/chat") {
-    const activeConfig = getActiveLocalConfig();
-    if (activeConfig) {
-      headers["x-aura-local-key"] = activeConfig.apiKey;
-    }
-  }
-
   try {
     const response = await fetch(fullUrl, {
       headers,
+      credentials: "include", // 携带 Cookie（JWT）
       ...options,
     });
 

@@ -45,18 +45,11 @@ import {
 /**
  * Aura 智能体核心路由 — POST /api/chat
  *
- * ★ Phase 4: 双模式 Key 解析
- *
- * 1. 客户端模式（Header 携带 X-Aura-Local-Key）：
- *    - 从请求 body 中读取完整模型配置（apiKey, baseUrl, modelName, workspacePath）
- *    - Key 用完即焚，不落库
- *    - 不需要 JWT 鉴权
- *
- * 2. 服务端模式：
- *    - 从 Cookie 解析 JWT，获取 userId
- *    - 从 user_model_configs 表查询用户选定/默认的模型配置
- *    - 解密 apiKey 后动态创建 provider
- *    - 工作空间路径 = DATA_ROOT/workspaces/user_{userId}/{workspaceId}
+ * 认证与模型配置解析：
+ * - 统一通过 JWT Cookie 鉴权，客户端需先登录
+ * - 从 user_model_configs 表查询用户选定/默认的模型配置
+ * - 解密 apiKey 后动态创建 provider
+ * - 工作空间路径 = DATA_ROOT/workspaces/user_{userId}/{workspaceId}
  */
 
 // ============================================================
@@ -183,77 +176,54 @@ export async function POST(req: Request) {
     );
 
     // ============================================================
-    // ★ Phase 4: 双模式 Key 解析
+    // JWT 认证 + 模型配置解析
+    // 客户端与服务端统一走此路径，客户端需先登录获取 JWT
     // ============================================================
 
     let activeApiKey: string;
     let activeBaseUrl: string;
     let activeModelName: string;
-    let activeUserId: number | null = null;
 
-    // 1. 检查 X-Aura-Local-Key Header（客户端免登模式）
-    const localKey = req.headers.get("x-aura-local-key");
+    const authPayload = await getAuthenticatedUser(req);
+    if (!authPayload) {
+      return Response.json(
+        { code: 401, message: "请先登录" },
+        { status: 401 }
+      );
+    }
 
-    if (localKey) {
-      const clientApiKey = body.apiKey ?? localKey;
-      const clientBaseUrl =
-        body.baseUrl ?? "https://api.deepseek.com/v1";
-      const clientModelName = body.modelName ?? "deepseek-chat";
+    const activeUserId: number = authPayload.userId;
 
-      if (!clientApiKey) {
+    const config = await db.query.userModelConfigs.findFirst({
+      where: and(
+        eq(userModelConfigs.userId, authPayload.userId),
+        selectedConfigId
+          ? eq(userModelConfigs.id, selectedConfigId)
+          : eq(userModelConfigs.isDefault, true)
+      ),
+    });
+
+    if (!config) {
+      activeApiKey = process.env.DEEPSEEK_API_KEY ?? "";
+      activeBaseUrl =
+        process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1";
+      activeModelName = body.model ?? process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
+
+      if (!activeApiKey) {
         return Response.json(
-          { code: 400, message: "客户端模式缺少 apiKey" },
+          { code: 400, message: "未配置模型，请在系统设置中添加模型配置" },
           { status: 400 }
         );
       }
-
-      activeApiKey = clientApiKey;
-      activeBaseUrl = clientBaseUrl;
-      activeModelName = clientModelName;
-
-      console.log("[Aura Chat] 客户端模式 (X-Aura-Local-Key)");
     } else {
-      const authPayload = await getAuthenticatedUser(req);
-      if (!authPayload) {
-        return Response.json(
-          { code: 401, message: "请先登录" },
-          { status: 401 }
-        );
-      }
-
-      activeUserId = authPayload.userId;
-
-      const config = await db.query.userModelConfigs.findFirst({
-        where: and(
-          eq(userModelConfigs.userId, authPayload.userId),
-          selectedConfigId
-            ? eq(userModelConfigs.id, selectedConfigId)
-            : eq(userModelConfigs.isDefault, true)
-        ),
-      });
-
-      if (!config) {
-        activeApiKey = process.env.DEEPSEEK_API_KEY ?? "";
-        activeBaseUrl =
-          process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1";
-        activeModelName = body.model ?? process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
-
-        if (!activeApiKey) {
-          return Response.json(
-            { code: 400, message: "未配置模型，请在系统设置中添加模型配置" },
-            { status: 400 }
-          );
-        }
-      } else {
-        activeApiKey = decrypt(config.apiKeyEncrypted);
-        activeBaseUrl = config.baseUrl ?? "https://api.deepseek.com/v1";
-        activeModelName = config.modelName;
-      }
-
-      console.log(
-        `[Aura Chat] 服务端模式 (userId=${authPayload.userId}, model=${activeModelName})`
-      );
+      activeApiKey = decrypt(config.apiKeyEncrypted);
+      activeBaseUrl = config.baseUrl ?? "https://api.deepseek.com/v1";
+      activeModelName = config.modelName;
     }
+
+    console.log(
+      `[Aura Chat] userId=${authPayload.userId}, model=${activeModelName}`
+    );
 
     // ============================================================
     // 2. 动态创建 DeepSeek provider 实例
