@@ -8,6 +8,7 @@
  * 密码不自动回填已加密值。
  */
 import React, { useState, useEffect, useCallback } from "react";
+import { auraFetch } from "@/lib/api-client";
 import type { DbConnectionItem } from "@/lib/agent/scene-data";
 
 interface DbConnectionPanelProps {
@@ -50,7 +51,7 @@ export function DbConnectionPanel({
   const loadConnections = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/db-connections");
+      const res = await auraFetch("/api/db-connections");
       const data = await res.json();
       if (data.code === 200 && data.data?.connections) {
         setConnections(data.data.connections);
@@ -131,13 +132,13 @@ export function DbConnectionPanel({
 
       let res: Response;
       if (editingId) {
-        res = await fetch(`/api/db-connections/${editingId}`, {
+        res = await auraFetch(`/api/db-connections/${editingId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
       } else {
-        res = await fetch("/api/db-connections", {
+        res = await auraFetch("/api/db-connections", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -163,7 +164,7 @@ export function DbConnectionPanel({
   const handleDelete = async (id: string) => {
     if (!confirm("确定要删除此数据库连接吗？")) return;
     try {
-      const res = await fetch(`/api/db-connections/${id}`, { method: "DELETE" });
+      const res = await auraFetch(`/api/db-connections/${id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.code === 200) {
         await loadConnections();
@@ -179,7 +180,7 @@ export function DbConnectionPanel({
     setTestingId(id);
     setTestResult(null);
     try {
-      const res = await fetch(`/api/db-connections/${id}/test`, {
+      const res = await auraFetch(`/api/db-connections/${id}/test`, {
         method: "POST",
       });
       const data = await res.json();

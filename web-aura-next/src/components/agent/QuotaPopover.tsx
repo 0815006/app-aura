@@ -6,6 +6,7 @@
  * 从 AI 控制台 WS 标签点击打开，显示今日用量 + 配额调整。
  */
 import React, { useState, useEffect, useCallback } from "react";
+import { auraFetch } from "@/lib/api-client";
 
 interface QuotaInfo {
   dailyTokenLimit: number;
@@ -32,7 +33,7 @@ export function QuotaPopover({ workspaceId, workspaceLabel }: QuotaPopoverProps)
   const fetchQuota = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/workspaces/quota?workspaceId=${workspaceId}`);
+      const res = await auraFetch(`/api/workspaces/quota?workspaceId=${workspaceId}`);
       const data = await res.json();
       if (data.code === 200) {
         setQuota(data.data);
@@ -60,7 +61,7 @@ export function QuotaPopover({ workspaceId, workspaceLabel }: QuotaPopoverProps)
     setSaving(true);
     setMessage("");
     try {
-      const res = await fetch("/api/workspaces/quota", {
+      const res = await auraFetch("/api/workspaces/quota", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId, dailyTokenLimit: num }),
@@ -89,7 +90,7 @@ export function QuotaPopover({ workspaceId, workspaceLabel }: QuotaPopoverProps)
     setSaving(true);
     setMessage("");
     try {
-      const res = await fetch("/api/workspaces/quota", {
+      const res = await auraFetch("/api/workspaces/quota", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId, dailyTokenLimit: null }),

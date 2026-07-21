@@ -7,6 +7,7 @@
  * 纯展示组件，不含交互选择逻辑。
  */
 import React, { useState, useEffect, useCallback } from "react";
+import { auraFetch } from "@/lib/api-client";
 import type { SceneListItem } from "@/lib/agent/scene-data";
 
 export function ScenesSection() {
@@ -16,7 +17,7 @@ export function ScenesSection() {
   const loadScenes = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/scenes");
+      const res = await auraFetch("/api/scenes");
       const data = await res.json();
       if (data.code === 200 && data.data?.scenes) {
         setScenes(data.data.scenes);

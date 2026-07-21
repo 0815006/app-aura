@@ -7,6 +7,7 @@
  * 选中项高亮，切换时更新全局状态。
  */
 import React, { useState, useEffect, useCallback } from "react";
+import { auraFetch } from "@/lib/api-client";
 
 // ============================================================
 // 类型定义
@@ -37,7 +38,7 @@ export function ModelSwitcher({ selectedConfigId, onSelect }: ModelSwitcherProps
   // 加载模型配置列表
   const loadConfigs = useCallback(async () => {
     try {
-      const res = await fetch("/api/models");
+      const res = await auraFetch("/api/models");
       const data = await res.json();
       if (data.code === 200 && Array.isArray(data.data)) {
         setConfigs(data.data);

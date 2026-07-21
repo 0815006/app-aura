@@ -6,6 +6,7 @@
  * 四个配置模块：AI 模型、数据库连接、联网搜索、默认配额。
  */
 import { useState, useEffect, useCallback } from "react";
+import { auraFetch } from "@/lib/api-client";
 import { ModelConfigPanel } from "@/components/agent/ModelConfigPanel";
 import { DbConnectionPanel } from "@/components/agent/DbConnectionPanel";
 import { SettingsCard } from "@/components/settings/SettingsCard";
@@ -45,7 +46,7 @@ export default function SettingsPage() {
   const loadSettings = useCallback(async () => {
     setSettingsLoading(true);
     try {
-      const res = await fetch("/api/user-settings");
+      const res = await auraFetch("/api/user-settings");
       const data = await res.json();
       if (data.code === 200) {
         setSettings(data.data.settings);
@@ -60,7 +61,7 @@ export default function SettingsPage() {
   // ========== 加载模型概览 ==========
   const loadModels = useCallback(async () => {
     try {
-      const res = await fetch("/api/models");
+      const res = await auraFetch("/api/models");
       const data = await res.json();
       if (data.code === 200 && Array.isArray(data.data)) {
         setModelCount(data.data.length);
@@ -75,7 +76,7 @@ export default function SettingsPage() {
   // ========== 加载 DB 连接概览 ==========
   const loadDbConns = useCallback(async () => {
     try {
-      const res = await fetch("/api/db-connections");
+      const res = await auraFetch("/api/db-connections");
       const data = await res.json();
       if (data.code === 200 && Array.isArray(data.data?.connections)) {
         setDbConnCount(data.data.connections.length);
@@ -93,7 +94,7 @@ export default function SettingsPage() {
 
   // ========== 保存单项设置 ==========
   const saveSetting = async (key: string, value: string | null) => {
-    const res = await fetch("/api/user-settings", {
+    const res = await auraFetch("/api/user-settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key, value }),

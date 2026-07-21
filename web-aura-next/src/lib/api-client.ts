@@ -125,6 +125,60 @@ export const api = {
   delete<T>(url: string): Promise<ApiResponse<T>> {
     return request<T>(url, { method: "DELETE" });
   },
+
+  patch<T>(url: string, body?: unknown): Promise<ApiResponse<T>> {
+    return request<T>(url, {
+      method: "PATCH",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  },
 };
+
+/**
+ * auraFetch — 对原生 fetch 的轻量封装，自动补齐 baseUrl 和 Authorization 头。
+ *
+ * 使用场景：部分组件内部已有复杂的 fetch().then() 链式调用，
+ * 不希望重构为 api.get/post/... 时，直接将 fetch(url, init) 替换为 auraFetch(url, init) 即可。
+ *
+ * 返回原生 Response 对象，调用方自行 .json() / .text() 处理。
+ */
+export async function auraFetch(
+  url: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const baseUrl = getBaseUrl();
+  const fullUrl = `${baseUrl}${url}`;
+  const isClient = getAuraMode() === "client";
+
+  const headers: Record<string, string> = {};
+
+  // 保留原始 init.headers
+  if (init?.headers) {
+    if (init.headers instanceof Headers) {
+      init.headers.forEach((v, k) => {
+        headers[k] = v;
+      });
+    } else if (Array.isArray(init.headers)) {
+      for (const [k, v] of init.headers) {
+        headers[k] = v;
+      }
+    } else {
+      Object.assign(headers, init.headers);
+    }
+  }
+
+  // 客户端模式自动注入 Authorization
+  if (isClient) {
+    const token = getAuthToken();
+    if (token && !headers["Authorization"]) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+
+  return fetch(fullUrl, {
+    ...init,
+    headers,
+  });
+}
 
 export type { ApiResponse as ApiResponseType };

@@ -11,6 +11,7 @@
  * 通过 fetch /api/workspaces/runs/[runId] 获取数据。
  */
 import { useState, useEffect } from "react";
+import { auraFetch } from "@/lib/api-client";
 
 // ============================================================
 // 类型定义
@@ -95,7 +96,7 @@ export function RunDetailPanel({ runId }: RunDetailPanelProps) {
     setLoading(true);
     setError(null);
 
-    fetch(`/api/workspaces/runs/${runId}`)
+    auraFetch(`/api/workspaces/runs/${runId}`)
       .then((res) => res.json())
       .then((json) => {
         if (cancelled) return;

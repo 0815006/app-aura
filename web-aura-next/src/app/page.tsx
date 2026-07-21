@@ -18,6 +18,7 @@ import { StepTimeline, type TimelineStep } from "@/components/agent/StepTimeline
 import { UsageBadge } from "@/components/agent/UsageBadge";
 import { RunDetailPanel } from "@/components/agent/RunDetailPanel";
 import { useAuth } from "@/lib/auth/auth-context";
+import { auraFetch } from "@/lib/api-client";
 
 // ============================================================
 // 会话摘要类型
@@ -231,7 +232,7 @@ export default function AgentWorkbench() {
   const fetchLatestRunTokens = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      const res = await fetch(
+      const res = await auraFetch(
         `/api/workspaces/runs?workspaceId=${workspaceId}&limit=1`
       );
       const data = await res.json();
@@ -260,7 +261,7 @@ export default function AgentWorkbench() {
 
       setFileLoading(true);
       try {
-        const res = await fetch(
+        const res = await auraFetch(
           `/api/workspaces/file?id=${workspaceId}&subpath=${encodeURIComponent(filePath)}`
         );
         const data = await res.json();
@@ -314,7 +315,7 @@ export default function AgentWorkbench() {
     }
     setSessionsLoading(true);
     try {
-      const res = await fetch(
+      const res = await auraFetch(
         `/api/workspaces/chat-sessions?workspaceId=${workspaceId}&limit=3`
       );
       const data = await res.json();
@@ -334,7 +335,7 @@ export default function AgentWorkbench() {
     setAllSessionsLoading(true);
     setAllSessionsModalOpen(true);
     try {
-      const res = await fetch(
+      const res = await auraFetch(
         `/api/workspaces/chat-sessions?workspaceId=${workspaceId}&all=1`
       );
       const data = await res.json();
@@ -357,7 +358,7 @@ export default function AgentWorkbench() {
       if (title) setSessionTitle(title);
       try {
         // 1. 加载历史消息
-        const res = await fetch(
+        const res = await auraFetch(
           `/api/workspaces/chat-messages?workspaceId=${workspaceId}&sessionId=${sessionId}`
         );
         const data = await res.json();
@@ -366,13 +367,13 @@ export default function AgentWorkbench() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let runSteps: any[] = [];
         try {
-          const runsRes = await fetch(
+          const runsRes = await auraFetch(
             `/api/workspaces/runs?workspaceId=${workspaceId}&sessionId=${sessionId}&limit=1`
           );
           const runsData = await runsRes.json();
           if (runsData.code === 200 && runsData.data?.runs?.length > 0) {
             const runId = runsData.data.runs[0].id;
-            const detailRes = await fetch(`/api/workspaces/runs/${runId}`);
+            const detailRes = await auraFetch(`/api/workspaces/runs/${runId}`);
             const detailData = await detailRes.json();
             if (detailData.code === 200 && Array.isArray(detailData.data?.steps)) {
               runSteps = detailData.data.steps;
@@ -506,7 +507,7 @@ export default function AgentWorkbench() {
     async (sessionId: string) => {
       if (!workspaceId) return;
       try {
-        const res = await fetch(
+        const res = await auraFetch(
           `/api/workspaces/runs?workspaceId=${workspaceId}&sessionId=${sessionId}&limit=1`
         );
         const data = await res.json();
@@ -540,7 +541,7 @@ export default function AgentWorkbench() {
     async (sessionId: string) => {
       if (!workspaceId) return;
       try {
-        const res = await fetch(
+        const res = await auraFetch(
           `/api/workspaces/runs?workspaceId=${workspaceId}&sessionId=${sessionId}&limit=1`
         );
         const data = await res.json();
@@ -569,7 +570,7 @@ export default function AgentWorkbench() {
     setSaveLoading(true);
     setSaveMessage("");
     try {
-      const res = await fetch(
+      const res = await auraFetch(
         `/api/workspaces/file?id=${workspaceId}`,
         {
           method: "POST",

@@ -9,6 +9,7 @@
  * - apiKey 不自动回填已加密值
  */
 import React, { useState, useEffect, useCallback } from "react";
+import { auraFetch } from "@/lib/api-client";
 
 // ============================================================
 // 类型
@@ -56,7 +57,7 @@ export function ModelConfigPanel({
   const loadConfigs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/models");
+      const res = await auraFetch("/api/models");
       const data = await res.json();
       if (data.code === 200 && Array.isArray(data.data)) {
         setConfigs(data.data);
@@ -130,14 +131,14 @@ export function ModelConfigPanel({
         if (form.apiKey.trim()) {
           body.apiKey = form.apiKey.trim();
         }
-        res = await fetch(`/api/models?id=${editingId}`, {
+        res = await auraFetch(`/api/models?id=${editingId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
       } else {
         // 新增
-        res = await fetch("/api/models", {
+        res = await auraFetch("/api/models", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -170,7 +171,7 @@ export function ModelConfigPanel({
     if (!confirm("确定要删除这个模型配置吗？")) return;
 
     try {
-      const res = await fetch(`/api/models?id=${id}`, { method: "DELETE" });
+      const res = await auraFetch(`/api/models?id=${id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.code === 200) {
         await loadConfigs();

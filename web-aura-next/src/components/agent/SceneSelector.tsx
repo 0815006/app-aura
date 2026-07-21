@@ -7,6 +7,7 @@
  * 参考 ModelConfigPanel 的模态框模式。
  */
 import React, { useState, useEffect, useCallback } from "react";
+import { auraFetch } from "@/lib/api-client";
 import type { SceneListItem } from "@/lib/agent/scene-data";
 
 interface SceneSelectorProps {
@@ -22,7 +23,7 @@ export function SceneSelector({ open, onClose, onSelect }: SceneSelectorProps) {
   const loadScenes = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/scenes");
+      const res = await auraFetch("/api/scenes");
       const data = await res.json();
       if (data.code === 200 && data.data?.scenes) {
         setScenes(data.data.scenes);

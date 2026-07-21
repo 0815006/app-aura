@@ -8,6 +8,7 @@
  * 参考 ModelSwitcher 的下拉模式。
  */
 import React, { useState, useEffect, useCallback } from "react";
+import { auraFetch } from "@/lib/api-client";
 import type { DbConnectionItem } from "@/lib/agent/scene-data";
 
 interface DbConnectionSelectorProps {
@@ -30,7 +31,7 @@ export function DbConnectionSelector({
 
   const loadConnections = useCallback(async () => {
     try {
-      const res = await fetch("/api/db-connections");
+      const res = await auraFetch("/api/db-connections");
       const data = await res.json();
       if (data.code === 200 && data.data?.connections) {
         setConnections(data.data.connections);
