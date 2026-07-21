@@ -5,10 +5,15 @@
  * - 服务端模式 (AURA_MODE=server)：直接请求本地 /api/* 路由
  * - 客户端模式 (AURA_MODE=client)：自动将 /api/* 请求转发到服务端地址
  *
+ * 客户端支持运行时切换服务端地址（通过 StatusBar 点击），
+ * 地址优先级：localStorage 自定义 > 构建时默认 __AURA_SERVER_URL__ > localhost:8086。
+ *
  * 客户端与服务端使用统一的 JWT 认证（Cookie），模型配置由服务端 /api/models 管理。
  *
  * 所有前端 REST 接口统一走此模块，禁止直接使用裸 fetch。
  */
+
+import { getServerUrl, getAuraMode } from "./server-url";
 
 export interface ApiResponse<T = unknown> {
   code: number;
@@ -17,36 +22,12 @@ export interface ApiResponse<T = unknown> {
 }
 
 /**
- * 获取当前运行模式
- * 客户端通过全局变量 __AURA_MODE__ 判断，服务端通过 process.env 判断。
- */
-function getAuraMode(): "server" | "client" {
-  if (typeof window !== "undefined") {
-    const win = window as unknown as Record<string, unknown>;
-    if (win.__AURA_MODE__) {
-      return win.__AURA_MODE__ as "server" | "client";
-    }
-  }
-  if (typeof process !== "undefined" && process.env.AURA_MODE) {
-    return process.env.AURA_MODE as "server" | "client";
-  }
-  return "server";
-}
-
-/**
  * 获取 API 基础 URL
- * 客户端模式指向远程服务端，服务端模式使用相对路径。
+ * 客户端模式指向远程服务端（优先读 localStorage 自定义地址），
+ * 服务端模式使用相对路径。
  */
 function getBaseUrl(): string {
-  const mode = getAuraMode();
-  if (mode === "client") {
-    if (typeof window !== "undefined") {
-      const win = window as unknown as Record<string, unknown>;
-      return (win.__AURA_SERVER_URL__ as string) || (process.env.AURA_SERVER_URL as string) || "http://localhost:8086";
-    }
-    return "http://localhost:8086";
-  }
-  return "";
+  return getServerUrl();
 }
 
 // ============================================================

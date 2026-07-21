@@ -201,9 +201,11 @@ echo       2. 双击 Aura_*.msi 安装到系统
 echo.
 echo   📌 客户端会自动连接: %SERVER_URL%
 echo.
-echo   💡 如果部署到不同服务器，请:
-echo       1. 修改 web-aura-next\.env.lan 中的 AURA_SERVER_URL
-echo       2. 重新运行本脚本
+echo   💡 如需更换目标服务器：
+echo       方式一（推荐，免重新打包）：启动客户端后，点击左下角连接状态，
+echo             弹出设置面板直接修改服务器地址并保存
+echo       方式二（重新打包）：修改 web-aura-next\.env.lan 中的
+echo             AURA_SERVER_URL，重新运行本脚本
 echo ==================================================
 echo.
 

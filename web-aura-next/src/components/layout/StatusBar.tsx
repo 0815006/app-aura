@@ -1,31 +1,25 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { ServerUrlDialog } from "./ServerUrlDialog";
+import { getServerUrl, getAuraMode } from "@/lib/server-url";
 
 const POLL_INTERVAL = 30_000; // 30 秒轮询一次
 
 /**
  * 获取健康检查的完整 URL
- *
- * - 服务端模式（浏览器直连）：使用相对路径 /api/health
- * - 客户端模式（Tauri 桌面端）：拼接完整服务端地址
- *   因为打包后前端从 tauri://localhost 加载，相对路径到不了服务器
  */
 function getHealthUrl(): string {
-  if (typeof window !== "undefined") {
-    const win = window as unknown as Record<string, unknown>;
-    if (win.__AURA_MODE__ === "client") {
-      const serverUrl =
-        (win.__AURA_SERVER_URL__ as string) || "http://localhost:8086";
-      return `${serverUrl}/api/health`;
-    }
-  }
-  return "/api/health";
+  const base = getServerUrl();
+  return base ? `${base}/api/health` : "/api/health";
 }
 
 export function StatusBar() {
   const [time, setTime] = useState("");
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const auraMode = getAuraMode();
 
   const checkHealth = useCallback(async () => {
     try {
@@ -36,6 +30,11 @@ export function StatusBar() {
       setConnected(false);
     }
   }, []);
+
+  const handleUrlChanged = useCallback(() => {
+    // 地址变更后立即重新检测
+    checkHealth();
+  }, [checkHealth]);
 
   useEffect(() => {
     const updateTime = () => {
@@ -61,9 +60,29 @@ export function StatusBar() {
     return () => clearInterval(timer);
   }, [checkHealth]);
 
+  const isClient = auraMode === "client";
+
   return (
     <footer className="flex items-center justify-between px-4 bg-aura-bg border-t border-aura-border-light text-xs text-aura-text-muted select-none">
-      <div className="flex items-center gap-2">
+      <div
+        className={`flex items-center gap-2 ${
+          isClient
+            ? "cursor-pointer hover:text-aura-text transition-colors"
+            : ""
+        }`}
+        onClick={() => {
+          if (isClient) setDialogOpen(true);
+        }}
+        title={isClient ? "点击设置服务端地址" : undefined}
+        role={isClient ? "button" : undefined}
+        tabIndex={isClient ? 0 : undefined}
+        onKeyDown={(e) => {
+          if (isClient && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            setDialogOpen(true);
+          }
+        }}
+      >
         <span
           className={`inline-block w-2 h-2 rounded-full ${
             connected === null
@@ -82,6 +101,15 @@ export function StatusBar() {
         </span>
       </div>
       <div>{time}</div>
+
+      {/* 服务端地址编辑弹窗（仅客户端模式） */}
+      {isClient && (
+        <ServerUrlDialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          onUrlChanged={handleUrlChanged}
+        />
+      )}
     </footer>
   );
 }
