@@ -21,6 +21,11 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className="h-full antialiased">
       <body className="h-full">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__AURA_MODE__="${process.env.AURA_MODE || ""}";window.__AURA_SERVER_URL__="${process.env.AURA_SERVER_URL || ""}";`,
+          }}
+        />
         <AuthProvider>
           <Layout>{children}</Layout>
         </AuthProvider>
