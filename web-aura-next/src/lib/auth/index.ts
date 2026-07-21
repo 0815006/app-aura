@@ -81,22 +81,37 @@ export async function verifyJWT(
 // ============================================================
 
 /**
- * 从 Request 的 Cookie 中提取 JWT 并验证，返回用户身份。
+ * 从 Request 中提取 JWT 并验证，返回用户身份。
  * 用于服务端 Route Handler 中获取当前登录用户。
+ *
+ * 支持两种 Token 来源（按优先级）：
+ * 1. Authorization: Bearer <token> — 客户端模式（Tauri 跨协议）
+ * 2. Cookie: aura_token=<token> — 服务端模式（浏览器同源）
  *
  * @returns JwtPayload | null  — null 表示未登录或 Token 无效
  */
 export async function getAuthenticatedUser(
   req: Request
 ): Promise<JwtPayload | null> {
-  // 1. 从 Cookie 提取 aura_token
-  const cookieHeader = req.headers.get("cookie") || "";
-  const cookies = parseCookies(cookieHeader);
-  const token = cookies[AUTH_COOKIE_NAME];
+  let token: string | null = null;
+
+  // 方式 1: Authorization: Bearer <token>
+  const authHeader = req.headers.get("authorization") || "";
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (bearerMatch) {
+    token = bearerMatch[1].trim();
+  }
+
+  // 方式 2: Cookie aura_token（fallback）
+  if (!token) {
+    const cookieHeader = req.headers.get("cookie") || "";
+    const cookies = parseCookies(cookieHeader);
+    token = cookies[AUTH_COOKIE_NAME] || null;
+  }
 
   if (!token) return null;
 
-  // 2. 验证 JWT
+  // 验证 JWT
   const payload = await verifyJWT(token);
   return payload;
 }

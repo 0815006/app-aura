@@ -5,6 +5,12 @@
  *
  * 提供全局认证状态：user, login(), register(), logout(), isLoading
  * 启动时从 /api/auth/me 恢复登录态。
+ *
+ * 双端认证策略：
+ * - 服务端模式（浏览器 ~ 同源）：Cookie (aura_token, SameSite=Lax, HttpOnly)
+ * - 客户端模式（Tauri ~ 跨协议 tauri:// → http://）：Authorization: Bearer <token>
+ *   Cookie 在跨协议场景下 SameSite=Lax 不生效，SameSite=None 又需要 HTTPS，
+ *   因此客户端模式改用 localStorage 存 JWT，每次通过 Authorization header 发送。
  */
 import React, {
   createContext,
@@ -15,28 +21,65 @@ import React, {
   type ReactNode,
 } from "react";
 import { hashPasswordClient } from "@/lib/auth/client-hash";
+import { getServerUrl, getAuraMode } from "@/lib/server-url";
 
 // ============================================================
-// 客户端模式 API 路径适配
+// Token 存储（客户端模式专用）
 // ============================================================
+
+const TOKEN_KEY = "aura-auth-token";
+
+function getStoredToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredToken(token: string): void {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    // 静默
+  }
+}
+
+function clearStoredToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // 静默
+  }
+}
+
+// ============================================================
+// API 路径拼接 + 认证请求头
+// ============================================================
+
+function getAuthUrl(path: string): string {
+  const base = getServerUrl();
+  return base ? `${base}${path}` : path;
+}
 
 /**
- * 获取完整的 API 路径
+ * 构建 auth 请求的 headers
  *
- * - 服务端模式（浏览器直连）：直接返回相对路径
- * - 客户端模式（Tauri 桌面端）：拼接完整服务端地址
- *   因为打包后前端从 tauri://localhost 加载，相对路径到不了服务器
+ * 客户端模式：Authorization: Bearer <token>
+ * 服务端模式：无额外 headers（走 Cookie）
  */
-function getAuthUrl(path: string): string {
-  if (typeof window !== "undefined") {
-    const win = window as unknown as Record<string, unknown>;
-    if (win.__AURA_MODE__ === "client") {
-      const serverUrl =
-        (win.__AURA_SERVER_URL__ as string) || "http://localhost:8086";
-      return `${serverUrl}${path}`;
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+  if (getAuraMode() === "client") {
+    const token = getStoredToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
     }
   }
-  return path;
+
+  return headers;
 }
 
 // ============================================================
@@ -75,22 +118,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 启动时从 /api/auth/me 恢复登录态
+  const isClient = getAuraMode() === "client";
+
+  // 启动时恢复登录态
   useEffect(() => {
     const restoreSession = async () => {
       try {
-        const res = await fetch(getAuthUrl("/api/auth/me"));
+        const res = await fetch(getAuthUrl("/api/auth/me"), {
+          headers: authHeaders(),
+          credentials: isClient ? "include" : "same-origin",
+        });
         const data = await res.json();
         if (data.code === 200 && data.data) {
           setUser(data.data);
+        } else {
+          // 服务端拒绝 → 清除可能过期的 token
+          if (isClient) clearStoredToken();
         }
       } catch {
-        // 未登录或网络错误，静默处理
+        // 网络错误，静默保留 token 以便重试
       } finally {
         setIsLoading(false);
       }
     };
     restoreSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = useCallback(
@@ -99,11 +151,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const hashed = await hashPasswordClient(password);
         const res = await fetch(getAuthUrl("/api/auth/login"), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify({ username, password: hashed }),
+          credentials: isClient ? "include" : "same-origin",
         });
         const data = await res.json();
         if (data.code === 200 && data.data?.user) {
+          // 客户端模式：存 token 到 localStorage
+          if (isClient && data.data.token) {
+            setStoredToken(data.data.token);
+          }
           setUser(data.data.user);
           return { success: true, message: "登录成功" };
         }
@@ -113,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, message };
       }
     },
-    []
+    [isClient]
   );
 
   const register = useCallback(
@@ -122,11 +179,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const hashed = await hashPasswordClient(password);
         const res = await fetch(getAuthUrl("/api/auth/register"), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify({ username, password: hashed, displayName }),
+          credentials: isClient ? "include" : "same-origin",
         });
         const data = await res.json();
         if (data.code === 200 && data.data?.user) {
+          if (isClient && data.data.token) {
+            setStoredToken(data.data.token);
+          }
           setUser(data.data.user);
           return { success: true, message: "注册成功" };
         }
@@ -136,17 +197,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, message };
       }
     },
-    []
+    [isClient]
   );
 
   const logout = useCallback(async () => {
     try {
-      await fetch(getAuthUrl("/api/auth/logout"), { method: "POST" });
+      await fetch(getAuthUrl("/api/auth/logout"), {
+        method: "POST",
+        headers: authHeaders(),
+        credentials: isClient ? "include" : "same-origin",
+      });
     } catch {
       // 忽略网络错误
     }
+    if (isClient) clearStoredToken();
     setUser(null);
-  }, []);
+  }, [isClient]);
 
   return (
     <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>

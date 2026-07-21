@@ -2,13 +2,11 @@
  * Aura 统一 API 请求封装（双端自适应）
  *
  * 核心逻辑：
- * - 服务端模式 (AURA_MODE=server)：直接请求本地 /api/* 路由
- * - 客户端模式 (AURA_MODE=client)：自动将 /api/* 请求转发到服务端地址
+ * - 服务端模式 (AURA_MODE=server)：直接请求本地 /api/* 路由，走 Cookie 认证
+ * - 客户端模式 (AURA_MODE=client)：自动转发到服务端地址，走 Authorization: Bearer 认证
  *
  * 客户端支持运行时切换服务端地址（通过 StatusBar 点击），
  * 地址优先级：localStorage 自定义 > 构建时默认 __AURA_SERVER_URL__ > localhost:8086。
- *
- * 客户端与服务端使用统一的 JWT 认证（Cookie），模型配置由服务端 /api/models 管理。
  *
  * 所有前端 REST 接口统一走此模块，禁止直接使用裸 fetch。
  */
@@ -23,11 +21,23 @@ export interface ApiResponse<T = unknown> {
 
 /**
  * 获取 API 基础 URL
- * 客户端模式指向远程服务端（优先读 localStorage 自定义地址），
- * 服务端模式使用相对路径。
  */
 function getBaseUrl(): string {
   return getServerUrl();
+}
+
+/**
+ * 获取认证 token（客户端模式从 localStorage 读取）
+ */
+const TOKEN_KEY = "aura-auth-token";
+
+function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================
@@ -40,16 +50,25 @@ async function request<T>(
 ): Promise<ApiResponse<T>> {
   const baseUrl = getBaseUrl();
   const fullUrl = `${baseUrl}${url}`;
+  const isClient = getAuraMode() === "client";
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string> | undefined),
   };
 
+  // 客户端模式：注入 Authorization: Bearer <token>
+  if (isClient) {
+    const token = getAuthToken();
+    if (token && !headers["Authorization"]) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+
   try {
     const response = await fetch(fullUrl, {
       headers,
-      credentials: "include", // 携带 Cookie（JWT）
+      credentials: isClient ? "include" : "same-origin",
       ...options,
     });
 
