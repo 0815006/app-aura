@@ -11,6 +11,31 @@ const nextConfig: NextConfig = {
     AURA_SERVER_URL: process.env.AURA_SERVER_URL,
   },
 
+  // ============================================================
+  // 全局 CORS 头（第三层兜底）
+  //
+  // Middleware + Route Handler 已经处理 CORS，此静态配置作为
+  // 静态资源请求的兜底（如有 _next/static/ 被跨域访问的场景）。
+  // ============================================================
+  async headers() {
+    return [
+      {
+        source: "/api/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          {
+            key: "Access-Control-Allow-Methods",
+            value: "GET, POST, PUT, DELETE, OPTIONS",
+          },
+          {
+            key: "Access-Control-Allow-Headers",
+            value: "Content-Type, Authorization, X-Aura-Local-Key, x-aura-local-key",
+          },
+        ],
+      },
+    ];
+  },
+
   // 允许的远程图片域名
   images: {
     remotePatterns: [],
