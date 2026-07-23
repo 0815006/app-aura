@@ -26,21 +26,22 @@ import {
   readFileFull,
   createDirectory,
   writeTextFile,
-  generateStructuredExcel,
   executePythonCode,
   webSearch,
   httpRequest,
   updateMemory,
-  // UI 专项工具
-  executePlaywrightValidation,
   saveUiAuditReport,
-  // DB 专项工具
-  dbExecuteQuery,
-  dbGetQueryPlan,
-  dbGetTableSchema,
-  dbListSlowQueries,
-  releaseAllPools,
 } from "@/lib/agent/tools";
+
+// ★ 重量级工具直接导入源文件（含 playwright/exceljs/mysql2），
+// 避免通过 barrel 导出触发 Turbopack dev 模式捆绑 OOM
+import { generateStructuredExcel } from "@/lib/agent/tools/generate-structured-excel";
+import { executePlaywrightValidation } from "@/lib/agent/tools/execute-playwright-validation";
+import { dbExecuteQuery } from "@/lib/agent/tools/db/db-execute-query";
+import { dbGetQueryPlan } from "@/lib/agent/tools/db/db-get-query-plan";
+import { dbGetTableSchema } from "@/lib/agent/tools/db/db-get-table-schema";
+import { dbListSlowQueries } from "@/lib/agent/tools/db/db-list-slow-queries";
+import { releaseAllPools } from "@/lib/agent/tools/db/db-pool-manager";
 
 /**
  * Aura 智能体核心路由 — POST /api/chat

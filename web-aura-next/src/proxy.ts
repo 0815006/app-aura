@@ -17,7 +17,7 @@ import type { NextRequest } from "next/server";
  * - 轻量的 /api/health 使用 *（无需 Cookie）
  * - 其他 /api/* 路由若 Origin 存在则回射 Origin + credentials
  */
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   if (!req.nextUrl.pathname.startsWith("/api/")) {
     return NextResponse.next();
   }

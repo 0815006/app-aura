@@ -5,6 +5,15 @@ const nextConfig: NextConfig = {
   // Tauri 构建脚本会从 .next/server/app/ 提取预渲染的静态 HTML 页面
   output: "standalone",
 
+  // ★ 开发模式：允许外部 IP 访问 HMR WebSocket 和开发资源
+  // 生产构建时此配置不生效，仅影响 next dev
+  allowedDevOrigins: [
+    "172.23.80.1",
+    "172.20.10.4",
+    "localhost",
+    "127.0.0.1",
+  ],
+
   // 暴露给客户端的公共环境变量（构建时内联到客户端 JS bundle）
   env: {
     AURA_MODE: process.env.AURA_MODE,
@@ -48,6 +57,11 @@ const nextConfig: NextConfig = {
     "jose",
     "drizzle-orm",
     "pg",
+    // ★ 以下为工具层间接引入的重量级包，Turbopack 捆绑分析耗时过长
+    // 标记为 external 后跳过捆绑，运行时直接从 node_modules 加载
+    "playwright",
+    "exceljs",
+    "mysql2",
   ],
 };
 

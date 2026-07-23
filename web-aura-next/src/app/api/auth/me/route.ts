@@ -16,10 +16,8 @@ export async function GET(req: Request) {
   try {
     const payload = await getAuthenticatedUser(req);
     if (!payload) {
-      return Response.json(
-        { code: 401, message: "未登录" },
-        { status: 401 }
-      );
+      // 返回 HTTP 200 避免浏览器控制台报红（401 是预期行为：未登录用户访问页面）
+      return Response.json({ code: 401, message: "未登录" });
     }
 
     const [user] = await db
@@ -33,10 +31,7 @@ export async function GET(req: Request) {
       .limit(1);
 
     if (!user) {
-      return Response.json(
-        { code: 401, message: "用户不存在" },
-        { status: 401 }
-      );
+      return Response.json({ code: 401, message: "用户不存在" });
     }
 
     return Response.json({

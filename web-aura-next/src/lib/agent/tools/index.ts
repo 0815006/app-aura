@@ -28,21 +28,17 @@ export { previewFileLines } from "./preview-file-lines";
 export { readFileFull } from "./read-file-full";
 export { createDirectory } from "./create-directory";
 export { writeTextFile } from "./write-text-file";
-export { generateStructuredExcel } from "./generate-structured-excel";
 export { executePythonCode } from "./execute-python-code";
 export { webSearch } from "./web-search";
 export { httpRequest } from "./http-request";
 export { updateMemory } from "./update-memory";
-
-// UI 专项工具（场景：UI 原型契约与自动化校验专家）
-export { executePlaywrightValidation } from "./execute-playwright-validation";
 export { saveUiAuditReport } from "./save-ui-audit-report";
 
-// DB 专项工具（场景：数据库诊断专家）
-export { dbExecuteQuery } from "./db/db-execute-query";
-export { dbGetQueryPlan } from "./db/db-get-query-plan";
-export { dbGetTableSchema } from "./db/db-get-table-schema";
-export { dbListSlowQueries } from "./db/db-list-slow-queries";
-export { releaseAllPools } from "./db/db-pool-manager";
+// ★ 以下工具依赖重量级包（playwright/exceljs/mysql2），仅限 Route Handler
+// 服务端代码通过直接导入源文件使用，不在此 barrel 中重新导出。
+// 原因：Turbopack dev 模式不认 serverExternalPackages，会尝试捆绑这些包导致 OOM。
+//   - generateStructuredExcel  → exceljs
+//   - executePlaywrightValidation → playwright (~400MB 含 Chromium)
+//   - dbExecuteQuery / dbGetQueryPlan / dbGetTableSchema / dbListSlowQueries / releaseAllPools → mysql2
 
 export type ToolCategory = "dba" | "perf" | "monitor" | "common";
