@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Next.js Middleware — 全局 CORS 适配
+ * Next.js Proxy — 全局 CORS 适配
  *
  * Tauri 桌面客户端从 tauri://localhost 自定义协议加载前端页面，
  * 发起 fetch("http://22.189.27.133:8086/api/...") 属于跨协议请求。
@@ -11,13 +11,13 @@ import type { NextRequest } from "next/server";
  * - 部分版本正常发送 Origin: tauri://localhost
  * - 部分版本不发送 Origin 头（空值）
  *
- * 本中间件处理两种场景并响应 OPTIONS 预检请求（204 No Content）。
+ * 本代理处理两种场景并响应 OPTIONS 预检请求（204 No Content）。
  *
  * CORS 允许列表：
  * - 轻量的 /api/health 使用 *（无需 Cookie）
  * - 其他 /api/* 路由若 Origin 存在则回射 Origin + credentials
  */
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   if (!req.nextUrl.pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
