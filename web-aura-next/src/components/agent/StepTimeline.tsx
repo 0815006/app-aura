@@ -224,10 +224,16 @@ function TimelineItem({
         {expanded && (
           <div className="px-3 pb-2.5 pt-1 border-t border-aura-border space-y-1.5">
             {/* 思考文本 */}
-            {step.type === "thought" && step.text && (
-              <p className="text-aura-text-secondary leading-relaxed italic whitespace-pre-wrap">
-                {step.text}
-              </p>
+            {step.type === "thought" && (
+              step.text && step.text.trim().length > 0 ? (
+                <p className="text-aura-text-secondary leading-relaxed italic whitespace-pre-wrap">
+                  {step.text}
+                </p>
+              ) : isStreaming ? (
+                <p className="text-aura-text-muted italic animate-pulse">
+                  思考中...
+                </p>
+              ) : null
             )}
 
             {/* 工具参数 */}

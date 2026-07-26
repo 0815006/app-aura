@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { WorkspaceTree } from "@/components/agent/WorkspaceTree";
 import { FileMentionInput, type FileMentionInputHandle } from "@/components/agent/FileMentionInput";
@@ -19,6 +19,7 @@ import { UsageBadge } from "@/components/agent/UsageBadge";
 import { RunDetailPanel } from "@/components/agent/RunDetailPanel";
 import { useAuth } from "@/lib/auth/auth-context";
 import { auraFetch } from "@/lib/api-client";
+import { getServerUrl, getAuraMode } from "@/lib/server-url";
 
 // ============================================================
 // 会话摘要类型
@@ -78,6 +79,80 @@ function formatRelativeTime(isoStr: string): string {
   if (diffDay === 1) return "昨天";
   if (diffDay < 7) return `${diffDay} 天前`;
   return date.toLocaleDateString("zh-CN");
+}
+
+// ============================================================
+// ★ 将 AI SDK v7 的 parts 数组按 text 边界拆分为「文字段」和「步骤段」
+// 使流式输出时文字能在步骤之间交错展示，而非全部堆在最后
+// ============================================================
+
+/** parts 拆分后的一个段：要么是纯文字，要么是一组连续的思考+工具调用步骤 */
+type PartSegment =
+  | { type: "text"; text: string }
+  | { type: "step"; steps: TimelineStep[] };
+
+/**
+ * 将 parts 数组按 text 边界切分成交错排列的文字段 / 步骤段。
+ *
+ * 流式时 parts 顺序如 [reasoning, tool, text, reasoning, tool, text]
+ * → [{step: [reasoning,tool]}, {text}, {step: [reasoning,tool]}, {text}]
+ *
+ * 历史加载时 parts 顺序如 [text, reasoning, tool, ...]
+ * → [{text}, {step: [reasoning,tool,...]}]  —— 与现有行为一致
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function splitPartsIntoSegments(parts: Record<string, any>[]): PartSegment[] {
+  const segments: PartSegment[] = [];
+  const pendingSteps: TimelineStep[] = [];
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part.type === "text") {
+      // 文字段：先清空前面累积的步骤（即使 text 为空也 flush，后续 filter 会过滤空文字段）
+      if (pendingSteps.length > 0) {
+        segments.push({ type: "step", steps: [...pendingSteps] });
+        pendingSteps.length = 0;
+      }
+      const textVal = part.text != null ? String(part.text) : "";
+      segments.push({ type: "text", text: textVal });
+    } else if (part.type === "tool-invocation") {
+      const ti = part.toolInvocation;
+      pendingSteps.push({
+        index: i,
+        type: "tool-call",
+        toolName: ti?.toolName ?? "unknown",
+        toolArgs: ti?.args,
+        toolResult: ti?.result,
+        state: ti?.state ?? "result",
+      });
+    } else if (part.type === "reasoning") {
+      // 流式时 reasoning text 可能为 undefined/空字符串 —— 仍保留占位，
+      // StepTimeline 中会对空文本显示"思考中..."动画
+      const rawText = part.text;
+      const thoughtText = rawText != null ? String(rawText) : "";
+      // 检查是否为 partial 状态（流式未完成）
+      const isPartial = part.state === "partial" || part.state === "streaming";
+      pendingSteps.push({
+        index: i,
+        type: "thought",
+        text: thoughtText,
+        state: isPartial ? "partial-call" : "done",
+      });
+    }
+  }
+
+  // 清空末尾累积的步骤（仅在有有效步骤时才推入）
+  if (pendingSteps.length > 0) {
+    segments.push({ type: "step", steps: [...pendingSteps] });
+  }
+
+  // 过滤：只去掉完全无内容的 segment
+  return segments.filter((seg) => {
+    if (seg.type === "text") return seg.text.trim().length > 0;
+    // step segment：只要有至少一个有效步骤就保留（包括空文本的 thought）
+    if (seg.type === "step") return seg.steps.length > 0;
+    return true;
+  });
 }
 
 export default function AgentWorkbench() {
@@ -175,34 +250,141 @@ export default function AgentWorkbench() {
     totalTokens: 0,
   });
 
+  // ★ 客户端模式：DefaultChatTransport 需要完整 API URL（Tauri WebView 中相对路径无效）
+  // 同时通过 headers 注入 Authorization: Bearer（跨协议场景下 Cookie 不可用）
+  const TOKEN_KEY = "aura-auth-token";
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { messages, sendMessage, status, stop, setMessages } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      // ★ body 为函数，每次发请求时动态求值，解决 useState 闭包过期问题
-      body: () => {
-        const extra: Record<string, unknown> = {};
-        if (workspaceIdRef.current) {
-          extra.workspaceId = workspaceIdRef.current;
-        }
-        if (modelConfigRef.current) {
-          extra.modelConfigId = modelConfigRef.current.id;
-        }
-        if (chatIdRef.current) {
-          extra.chatId = chatIdRef.current;
-        }
-        if (sceneSlugRef.current) {
-          extra.sceneSlug = sceneSlugRef.current;
-        }
-        if (dbConnIdRef.current) {
-          extra.dbConnectionId = dbConnIdRef.current;
-        }
-        return extra;
-      },
-    }),
+    transport: useMemo(
+      () =>
+        new DefaultChatTransport({
+          // ★ 客户端模式：拼接完整 API URL（Tauri WebView 中相对路径无效）
+          api: (() => {
+            if (getAuraMode() !== "client") return "/api/chat";
+            const base = getServerUrl();
+            return base ? `${base}/api/chat` : "/api/chat";
+          })(),
+          // ★ 客户端模式：注入 Authorization header（Cookie 跨协议不生效）
+          headers: (() => {
+            if (getAuraMode() !== "client") return {} as Record<string, string>;
+            try {
+              const token =
+                typeof window !== "undefined"
+                  ? localStorage.getItem(TOKEN_KEY)
+                  : null;
+              if (token) return { Authorization: `Bearer ${token}` };
+            } catch {
+              // ignore
+            }
+            return {} as Record<string, string>;
+          })(),
+          // ★ body 为函数，每次发请求时动态求值，解决 useState 闭包过期问题
+          body: () => {
+            const extra: Record<string, unknown> = {};
+            if (workspaceIdRef.current) {
+              extra.workspaceId = workspaceIdRef.current;
+            }
+            if (modelConfigRef.current) {
+              extra.modelConfigId = modelConfigRef.current.id;
+            }
+            if (chatIdRef.current) {
+              extra.chatId = chatIdRef.current;
+            }
+            if (sceneSlugRef.current) {
+              extra.sceneSlug = sceneSlugRef.current;
+            }
+            if (dbConnIdRef.current) {
+              extra.dbConnectionId = dbConnIdRef.current;
+            }
+            return extra;
+          },
+        }),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      []
+    ),
   } as any);
 
   const isLoading = status === "submitted" || status === "streaming";
+
+  // ============================================================
+  // ★ 将 messages 展开为 displayMessages：
+  //   assistant 消息的每个 parts segment 独立成一个气泡
+  //   流式时思考+工具调用分散显示，而非全部塞在一个气泡里
+  // ============================================================
+
+  type DisplayMessage =
+    | { key: string; role: "user"; content: string }
+    | { key: string; role: "assistant"; type: "text"; text: string; isLast: boolean }
+    | { key: string; role: "assistant"; type: "step"; steps: TimelineStep[]; isLast: boolean };
+
+  const displayMessages = useMemo((): DisplayMessage[] => {
+    const result: DisplayMessage[] = [];
+
+    messages.forEach((m, msgIndex) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msg = m as Record<string, any>;
+      const isLastOriginal = msgIndex === messages.length - 1;
+
+      if (msg.role === "user") {
+        // AI SDK v7 用户消息可能用 parts 也可能用 content，优先从 parts 提取
+        let userContent = "";
+        if (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0) {
+          userContent = (msg.parts as any[]).map((p: any) => (p.type === "text" ? (p.text ?? "") : "")).join("");
+        }
+        if (!userContent && typeof msg.content === "string") {
+          userContent = msg.content;
+        }
+        result.push({
+          key: msg.id ?? `user-${msgIndex}`,
+          role: "user",
+          content: userContent,
+        });
+        return;
+      }
+
+      // assistant with parts → 每个 segment 展开为独立气泡
+      if (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0) {
+        const segments = splitPartsIntoSegments(
+          msg.parts as Record<string, any>[]
+        );
+        segments.forEach((seg, segIdx) => {
+          const isLastSeg = isLastOriginal && segIdx === segments.length - 1;
+          if (seg.type === "step") {
+            result.push({
+              key: `${msg.id}-step-${segIdx}`,
+              role: "assistant",
+              type: "step",
+              steps: seg.steps,
+              isLast: isLastSeg,
+            });
+          } else {
+            result.push({
+              key: `${msg.id}-text-${segIdx}`,
+              role: "assistant",
+              type: "text",
+              text: seg.text,
+              isLast: isLastSeg,
+            });
+          }
+        });
+        return;
+      }
+
+      // fallback：无 parts 的 assistant 消息用 content
+      if (typeof msg.content === "string" && msg.content.length > 0) {
+        result.push({
+          key: msg.id ?? `assistant-${msgIndex}`,
+          role: "assistant",
+          type: "text",
+          text: msg.content,
+          isLast: isLastOriginal,
+        });
+      }
+    });
+
+    return result;
+  }, [messages]);
 
   // ★ 追踪 status 变化，在 streaming→ready 时刷新 token 用量
   const prevStatusRef = useRef(status);
@@ -397,9 +579,7 @@ export default function AgentWorkbench() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const uiMessages = (data.data as any[]).map((m: any) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const parts: any[] = [
-              { type: "text" as const, text: m.content ?? "" },
-            ];
+            const parts: any[] = [];
 
             // ★ 优先用 run_steps 重建完整的步骤时间线（含 thought + tool-call + tool-result）
             // 如果 runSteps 为空则回退到 chatMessages.toolCalls
@@ -482,6 +662,9 @@ export default function AgentWorkbench() {
                 });
               }
             }
+
+            // ★ text 放在最后，确保思考+工具步骤在前
+            if (m.content) parts.push({ type: "text" as const, text: m.content });
 
             return {
               id: String(m.id),
@@ -1122,83 +1305,42 @@ export default function AgentWorkbench() {
               </div>
             )}
 
-            {messages.map((m, msgIndex) => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const msg = m as Record<string, any>;
-              const isLastMessage = msgIndex === messages.length - 1;
-              const isStreamingMessage = isLastMessage && isLoading;
-
-              const textContent =
-                typeof msg.content === "string"
-                  ? msg.content
-                  : msg.parts
-                      ?.filter((p: { type: string }) => p.type === "text")
-                      ?.map((p: { text: string }) => p.text)
-                      ?.join("") ?? "";
+            {displayMessages.map((dm) => {
+              const isStreamingEntry =
+                dm.role === "assistant" && dm.isLast && isLoading;
 
               return (
                 <div
-                  key={m.id}
+                  key={dm.key}
                   className={`flex ${
-                    m.role === "user" ? "justify-end" : "justify-start"
+                    dm.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
                   <div
                     className={`max-w-[85%] rounded-xl p-3.5 ${
-                      m.role === "user"
+                      dm.role === "user"
                         ? "bg-emerald-600 text-white"
                         : "bg-aura-hover text-aura-text"
                     }`}
                   >
                     <span className="font-semibold block text-xs opacity-50 mb-1">
-                      {m.role === "user" ? "YOU" : "AURA"}
+                      {dm.role === "user" ? "YOU" : "AURA"}
                     </span>
 
                     <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                      {/* ★ StepTimeline: 步骤时间线（思考/工具调用在前，最终输出在后） */}
-                      {(() => {
-                        if (!msg.parts) return null;
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        const steps: TimelineStep[] = [];
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (msg.parts as Record<string, any>[]).forEach(
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          (part: Record<string, any>, i: number) => {
-                            if (part.type === "tool-invocation") {
-                              const ti = part.toolInvocation;
-                              steps.push({
-                                index: i,
-                                type: "tool-call",
-                                toolName: ti?.toolName ?? "unknown",
-                                toolArgs: ti?.args,
-                                toolResult: ti?.result,
-                                state: ti?.state ?? "result",
-                              });
-                            }
-                            if (part.type === "reasoning") {
-                              steps.push({
-                                index: i,
-                                type: "thought",
-                                text: part.text,
-                                state: "done",
-                              });
-                            }
-                          }
-                        );
-                        if (steps.length === 0) return null;
-                        return (
-                          <StepTimeline
-                            steps={steps}
-                            isStreaming={isStreamingMessage}
-                          />
-                        );
-                      })()}
+                      {dm.role === "user" ? (
+                        <p>{dm.content}</p>
+                      ) : dm.type === "step" ? (
+                        <StepTimeline
+                          steps={dm.steps}
+                          isStreaming={isStreamingEntry}
+                        />
+                      ) : (
+                        <p>{dm.text}</p>
+                      )}
 
-                      {/* ★ 最终文本输出（步骤时间线之后） */}
-                      {textContent && <p className="mt-2">{textContent}</p>}
-
-                      {/* ★ 流式加载指示器（只在最后一条 assistant 消息流式传输时显示） */}
-                      {isStreamingMessage && msg.role === "assistant" && (
+                      {/* ★ 流式加载指示器（只在最后一个 display 条目流式传输时显示） */}
+                      {isStreamingEntry && (
                         <div className="flex items-center gap-2 mt-2 pt-2 border-t border-aura-border">
                           <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-bounce" />
                           <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:100ms]" />

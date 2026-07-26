@@ -531,7 +531,7 @@ export async function POST(req: Request) {
             .join(", ") || "—";
 
         console.log(
-          `[Aura Chat] ✅ Step #${stepNumber} [${stepType}] · ${durationMs}ms · 🔧 ${tcSummary} · 📊 ${usageStr}`
+          `[Aura Chat] ✅ Step #${stepNumber} [${stepType ?? "reasoning"}] · ${durationMs}ms · 🔧 ${tcSummary} · 📊 ${usageStr}`
         );
         if (text) {
           console.log(`[Aura Chat]    💬 "${text.slice(0, 120)}"`);
